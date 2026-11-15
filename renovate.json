@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "minimumReleaseAge": "3 days",
+  "rangeStrategy": "pin",
+  "dependencyDashboard": true,
+  "schedule": ["before 6am on monday"],
+  "packageRules": [
+    {
+      "description": "Nunca RC/beta/canary/next (ex.: o dist-tag latest do CLI `prisma` já apontou para um RC)",
+      "matchPackageNames": ["*"],
+      "ignoreUnstable": true
+    },
+    {
+      "groupName": "next + react",
+      "matchPackageNames": ["next", "eslint-config-next", "react", "react-dom", "@types/react", "@types/react-dom"]
+    },
+    { "groupName": "prisma", "matchPackageNames": ["prisma", "@prisma/client", "@prisma/adapter-pg"] },
+    { "groupName": "better-auth", "matchPackageNames": ["better-auth", "auth"] },
+    {
+      "description": "Core de segurança/framework: sempre revisão manual",
+      "matchPackageNames": ["next", "better-auth", "auth", "prisma", "@prisma/client", "@prisma/adapter-pg"],
+      "automerge": false
+    },
+    { "description": "Majors: sempre manual, com leitura do guia de migração", "matchUpdateTypes": ["major"], "automerge": false },
+    {
+      "description": "TypeScript 7 só quando o typescript-eslint suportar (peer < 6.1 hoje)",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1.0"
+    },
+    { "matchUpdateTypes": ["minor", "patch"], "matchDepTypes": ["devDependencies"], "automerge": true },
+    {
+      "description": "Imagens base",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false
+    }
+  ]
+}

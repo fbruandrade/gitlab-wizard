@@ -1,0 +1,51 @@
+// Textos centralizados (docs/07-especificacao-telas.md). Client-safe.
+export const ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHENTICATED: 'Sua sessão expirou. Entre novamente.',
+  REAUTH_REQUIRED: 'Confirme sua identidade para continuar.',
+  FORBIDDEN: 'Você não tem permissão para esta ação.',
+  VALIDATION: 'Dados inválidos. Revise os campos.',
+  PASSWORD_CHANGE_REQUIRED: 'Troque a senha temporária antes de continuar.',
+  TWO_FACTOR_SETUP_REQUIRED: 'Configure o 2FA da ferramenta antes de continuar.',
+  NO_GITLAB_TOKEN: 'Vincule seu token GitLab para usar esta função.',
+  MISSING_CAPABILITY: 'Seu token GitLab não permite esta ação. Requer admin GitLab + scope `api` (e `admin_mode`, se aplicável).',
+  STATE_CHANGED: 'O estado do usuário mudou. Recarregue a página e tente de novo.',
+  USERNAME_MISMATCH: 'O username digitado não confere.',
+  GITLAB_USER_ALREADY_LINKED: 'Este usuário GitLab já está vinculado a outra conta da ferramenta.',
+  GITLAB_USER_MISMATCH: 'Este token pertence a outro usuário GitLab. Todos os tokens da conta devem ser do mesmo usuário GitLab.',
+  TOKEN_NOT_FOUND: 'Token não encontrado nesta conta (ou já foi removido).',
+  TOKEN_ALREADY_ADDED: 'Este token já está cadastrado nesta conta.',
+  ROTATION_IN_PROGRESS: 'Rotação já em andamento.',
+  INVALID_EXPIRY: 'Data de expiração inválida.',
+  LAST_ADMIN: 'Não é possível remover o último administrador.',
+  SELF_ACTION: 'Você não pode executar esta ação na própria conta.',
+  USERNAME_TAKEN: 'Username ou e-mail já em uso.',
+  NOT_FOUND: 'Registro não encontrado.',
+  GITLAB_TOKEN_INVALID: 'Seu token GitLab é inválido, expirou ou foi revogado. Vincule um novo token.',
+  GITLAB_FORBIDDEN:
+    'O GitLab recusou a ação (403). O seu token tem os scopes esperados; o GitLab pode impedir esta operação para este alvo (ex.: administradores). Se o Admin Mode estiver ativo na instância, confira o scope `admin_mode`.',
+  GITLAB_ADMIN_2FA_UNSUPPORTED:
+    'O GitLab não permite resetar o MFA de administradores (nem o da própria conta) pela API. Veja o passo a passo pelo console Rails na tela do usuário.',
+  GITLAB_LDAP_BLOCKED: 'Usuário bloqueado pelo LDAP/AD. O desbloqueio deve ser feito no diretório.',
+  GITLAB_2FA_NOT_ENABLED: 'Este usuário não tem MFA habilitado no GitLab.',
+  GITLAB_NOT_FOUND: 'Usuário não encontrado no GitLab.',
+  GITLAB_BAD_REQUEST: 'O GitLab recusou a requisição.',
+  GITLAB_RATE_LIMITED: 'Limite de requisições do GitLab atingido. Tente em alguns segundos.',
+  GITLAB_UNAVAILABLE: 'GitLab indisponível no momento.',
+  GITLAB_TLS_ERROR:
+    'Certificado TLS do GitLab não confiável. O administrador da ferramenta deve configurar a CA (NODE_EXTRA_CA_CERTS) ou GITLAB_TLS_INSECURE.',
+  GITLAB_ROTATION_UNKNOWN: 'A rotação não pôde ser confirmada. Verifique seu token no GitLab e, se necessário, vincule um novo.',
+  GITLAB_UNEXPECTED_RESPONSE: 'Resposta inesperada do GitLab. Verifique a versão da instância.',
+  NO_CRITERIA: 'Selecione ao menos um critério e um tipo de credencial.',
+  TOO_MANY_ITEMS: 'Muitos itens de uma vez (máximo de 500 por execução). Selecione menos itens.',
+  SCAN_NOT_FOUND: 'Varredura não encontrada.',
+  SCAN_NOT_READY: 'A varredura ainda não terminou ou falhou.',
+  SCAN_STALE: 'A varredura é antiga demais. Refaça a varredura antes de executar.',
+  ITEMS_NOT_IN_SCAN: 'Há itens que não constam na varredura ou que são protegidos.',
+  INVALID_SETTING: 'Valor inválido para a configuração.',
+  SIMULATION_REQUIRED: 'Faça a simulação (dry-run) com este mesmo valor antes de aplicar no GitLab.',
+  GITLAB_SETTING_NOT_APPLIED:
+    'O GitLab não aplicou a configuração. Este limite só existe no plano Ultimate; confira a edição da instância.',
+  INTERNAL: 'Erro inesperado. Tente novamente.',
+};
+
+export const messageFor = (code: string) => ERROR_MESSAGES[code] ?? ERROR_MESSAGES.INTERNAL!;

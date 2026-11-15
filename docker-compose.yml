@@ -1,0 +1,78 @@
+# Uso:
+#   Desenvolvimento (app no host):  docker compose up -d db && npm run db:deploy && npm run dev
+#   Stack completa (igual à produção): docker compose --profile app up --build
+#   Primeiro admin (uma vez):          docker compose --profile tools run --rm create-admin
+name: gitlab-wizard
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?defina no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-gitlab_wizard}
+      APP_MIGRATOR_PASSWORD: ${APP_MIGRATOR_PASSWORD:?defina no .env}
+      APP_RUNTIME_PASSWORD: ${APP_RUNTIME_PASSWORD:?defina no .env}
+    volumes:
+      # PG 18+: o diretório de dados fica em /var/lib/postgresql/18/docker, então o volume monta o pai.
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    ports:
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    profiles: [app, tools]
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://app_migrator:${APP_MIGRATOR_PASSWORD}@db:5432/${POSTGRES_DB:-gitlab_wizard}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  # Cria o primeiro administrador da ferramenta e imprime a senha temporária (uma vez). Recusa se já existir admin.
+  create-admin:
+    profiles: [tools]
+    build:
+      context: .
+      target: tools
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://app_runtime:${APP_RUNTIME_PASSWORD}@db:5432/${POSTGRES_DB:-gitlab_wizard}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  app:
+    profiles: [app]
+    image: gitlab-wizard:${APP_VERSION:-local}
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Sobrescreve o valor do .env (que aponta para localhost, usado pelo `npm run dev`).
+      DATABASE_URL: postgresql://app_runtime:${APP_RUNTIME_PASSWORD}@db:5432/${POSTGRES_DB:-gitlab_wizard}
+      NODE_ENV: production
+      # GitLab com CA interna: monte o certificado da CA e aponte para ele (preferível a GITLAB_TLS_INSECURE).
+      # NODE_EXTRA_CA_CERTS: /certs/ca.pem
+    # volumes:
+    #   - ./certs/ca.pem:/certs/ca.pem:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - '${APP_PORT:-3000}:3000'
+
+volumes:
+  pgdata:
