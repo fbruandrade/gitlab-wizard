@@ -11,6 +11,8 @@ import { pageCtx } from '@/server/token-selection';
 import { requireReadySession } from '@/server/auth/guards';
 import { loadGitLab } from '@/server/page-gitlab';
 import { getGitLabLicense, searchGitLabUsers } from '@/server/services/gitlab-user.service';
+import { PageHeader } from '@/components/common/page-header';
+import { Users } from 'lucide-react';
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ q?: string; blocked?: string; page?: string }> }) {
   const session = await requireReadySession();
@@ -29,7 +31,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-2xl font-semibold">Usuários GitLab</h1>
+      <PageHeader icon={Users} tone="blue" title="Usuários GitLab" />
       <LicenseSummary result={license} />
       <form method="get" className="flex flex-wrap items-center gap-3" role="search">
         <Input

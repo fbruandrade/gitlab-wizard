@@ -1,7 +1,7 @@
 // Regras da limpeza de credenciais. PURO e client-safe: decide o que é candidato a revogação.
 // Princípio: na dúvida, NÃO revoga. Falta de dado (ex.: chave SSH sem `last_used_at`) nunca vira "sem uso".
 
-export type CleanupReason = 'USER_BLOCKED' | 'UNUSED';
+export type CleanupReason = 'USER_BLOCKED' | 'UNUSED' | 'NO_EXPIRY';
 export type CredentialKind = 'PAT' | 'SSH_KEY';
 export type ProtectedReason = 'SELF' | 'LINKED_IN_TOOL';
 
@@ -12,6 +12,8 @@ export interface CleanupParams {
   unusedDays: number | null;
   includePat: boolean;
   includeSsh: boolean;
+  /** Chaves SSH sem data de validade (qualquer uso). Útil quando o GitLab não informa o último uso. Ausente em varreduras antigas. */
+  sshNoExpiry?: boolean;
 }
 
 export interface CleanupItem {
@@ -160,6 +162,7 @@ export function classify(i: ClassifyInput): ClassifyResult {
         const known = 'last_used_at' in k;
         if (!known) sshLastUsedUnavailable = true;
         const reasons = reasonsFor(user, k.last_used_at, k.created_at, known);
+        if (params.sshNoExpiry && !k.expires_at) reasons.push('NO_EXPIRY');
         if (!reasons.length) continue;
         items.push({
           key: `SSH_KEY:${k.id}`,
@@ -192,7 +195,10 @@ function protect(userId: number, patId: number | null, i: ClassifyInput): { prot
 }
 
 export function validateCleanupParams(p: CleanupParams): string | null {
-  if (!p.blockedUsers && p.unusedDays === null) return 'Selecione ao menos um critério (usuários bloqueados e/ou sem uso).';
+  if (!p.blockedUsers && p.unusedDays === null && !p.sshNoExpiry)
+    return 'Selecione ao menos um critério (usuários bloqueados, sem uso e/ou chaves SSH sem validade).';
+  if (p.sshNoExpiry && !p.blockedUsers && p.unusedDays === null && !p.includeSsh)
+    return 'Chaves SSH sem validade exigem incluir chaves SSH.';
   if (!p.includePat && !p.includeSsh) return 'Selecione ao menos um tipo de credencial (tokens e/ou chaves SSH).';
   if (p.unusedDays !== null && (!Number.isInteger(p.unusedDays) || p.unusedDays < 1 || p.unusedDays > 3650))
     return 'Dias sem uso: informe um inteiro entre 1 e 3650.';

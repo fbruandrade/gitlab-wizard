@@ -205,6 +205,7 @@ model AppSetting {
 enum AdminScanKind {
   CLEANUP // varredura de tokens/chaves SSH a revogar
   PAT_LIFETIME // simulação do efeito de limitar a validade máxima do PAT no GitLab
+  VAULT // inventário dos tokens dos projetos-cofre e plano de criação/rotação
 }
 
 enum AdminScanStatus {

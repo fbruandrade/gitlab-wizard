@@ -56,14 +56,23 @@ build-without-env:
     - *install
     - env -i PATH="$PATH" HOME="$HOME" npm run build
 
-integration:
+# Unitários + integração num só processo, com COBERTURA mesclada e limites mínimos (vitest.coverage.config.mts):
+# o job falha se a cobertura cair abaixo deles. Substitui um job "integration" separado (rodaria os mesmos testes 2x).
+coverage:
   stage: test
   <<: *npm-cache
   services: [{ name: 'docker:27-dind', alias: docker, command: ['--tls=false'] }]
   variables: { DATABASE_URL: 'postgresql://ci:ci@localhost:5432/ci' }
   script:
     - *install
-    - npm run test:integration
+    - npm run test:coverage
+  coverage: '/^Statements\s*:\s*([\d.]+)%/' # número que aparece no MR e nos badges
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths: [coverage/]
+    reports:
+      coverage_report: { coverage_format: cobertura, path: coverage/cobertura-coverage.xml }
 
 e2e:
   stage: test

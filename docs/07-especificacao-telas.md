@@ -270,7 +270,7 @@ Igual a T6, mas com todas as contas, filtro por conta e por alvo, e exportação
 
 Só `role = admin` com PAT de admin GitLab. Três blocos:
 
-1. **Nova varredura** — critérios (basta atender a um): ☑ credenciais de usuários **bloqueados**; ☑ credenciais **sem uso há mais de [N] dias** (campo editável + **Salvar como padrão**); tipos: ☑ tokens (PAT) ☑ chaves SSH. O botão desabilita sem critério/tipo.
+1. **Nova varredura** — critérios (basta atender a um): ☑ credenciais de usuários **bloqueados**; ☑ credenciais **sem uso há mais de [N] dias** (campo editável + **Salvar como padrão**); ☐ **chaves SSH sem prazo de validade** (todas as cadastradas sem `expires_at`, mesmo em uso ou sem dado de último uso; motivo "Sem validade"); tipos: ☑ tokens (PAT) ☑ chaves SSH. O botão desabilita sem critério/tipo.
 2. **Resultado** (acompanhamento por polling enquanto roda): resumo (revogáveis, por tipo, por motivo, usuários lidos, protegidos, bots ignorados), aviso quando o GitLab não informou o último uso de chaves SSH, e a **tabela** (tipo, usuário + estado, credencial, **escopos**, último uso, criada, motivo) com checkboxes. **Escopos**: para tokens, os privilegiados (`api`, `sudo`, `admin_mode`) em vermelho e os demais compactados (2 + "+N"), com a lista completa no tooltip e para leitor de tela; para chaves SSH (que não têm escopos), o tipo de uso (autenticação / assinatura / ambos). O resumo mostra quantos tokens candidatos têm escopo privilegiado. Protegidos aparecem com o selo e checkbox desabilitado. *Selecionar todos* (máx. 500). **Revogar selecionados (N)** → modal com motivo + `REVOGAR`. Depois: resumo `revogadas / ignoradas / com falha` e os motivos de cada exceção.
 3. **Varreduras recentes** (5 últimas).
 
@@ -280,6 +280,14 @@ Só `role = admin` com PAT de admin GitLab. Três blocos:
 - **Aplicar no GitLab (instância inteira)** — *Simular efeito de N dias*: resumo (quantos tokens/usuários seriam revogados, sem expiração, bots), **alertas em vermelho** se o seu token ou tokens vinculados a contas da ferramenta seriam revogados, e a tabela (50 primeiros) com usuário, token, **escopos de cada PAT** (privilegiados em vermelho, como na limpeza), data de expiração, último uso e observações; o resumo conta quantos dos afetados têm escopo privilegiado. *Aplicar N dias no GitLab…* → modal com motivo + `APLICAR N`.
 
 ---
+
+## T12 — Cofres de token (`/admin/vault`)
+
+Só admin da ferramenta; exige token com `VAULT_TOKENS` (scope `api`). **Configuração** (grupo raiz, papel, dias de alerta, validade, escopos) → **Varrer cofres (simulação)** → tabela com cofre (aplicação/ambiente), estado, escopos/papel, validade (dias restantes), grupo de destino e **o que será feito** (token novo, variáveis a criar/atualizar, token antigo a revogar depois da validação). Seleção + **Aplicar** abre diálogo com motivo (≥ 10 caracteres) e digitar `APLICAR`; resultado por cofre (concluído, parcial, ignorado, falha). Nunca exibe valores de token. Projetos sem acesso aparecem num aviso. Detalhes: [13](13-cofre-de-tokens-de-projeto.md).
+
+## Identidade visual
+
+Índigo-violeta (o "mago") como cor principal e **âmbar** como a "chave" (item ativo da navegação, validade). A **barra lateral** e a tela de login são a região mais carregada de cor; o conteúdo usa neutros levemente tingidos (matiz 285) e cartões brancos. Estados usam emblemas suaves com significado fixo: **verde** = ok/ativo, **âmbar** = atenção (vence, fora de sincronia), **vermelho** = bloqueado/vencido/destrutivo, **azul** = informação. Cada área tem um matiz no ícone do título (`PageHeader`: violeta = cofres/conta, azul = usuários, âmbar = tokens, rosa = limpeza, verde-azulado = políticas, cinza = histórico/auditoria): a cor orienta, não enfeita. Marca desenhada em SVG (`BrandMark`), fontes do sistema, modo escuro definido à parte (não é inversão). Tokens em `globals.css` (OKLCH). Momentos de personalidade ficam onde há esforço ou conclusão ("Tudo em ordem", "Casa limpa").
 
 ## Padrões gerais de UX
 

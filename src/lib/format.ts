@@ -15,3 +15,6 @@ export const initials = (name: string) =>
     .slice(0, 2)
     .map((p) => p[0]!.toUpperCase())
     .join('') || '?';
+
+const SCAN_STATUS: Record<string, string> = { RUNNING: 'em andamento', DONE: 'concluída', FAILED: 'falhou' };
+export const scanStatusLabel = (s: string) => SCAN_STATUS[s] ?? s;

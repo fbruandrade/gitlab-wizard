@@ -175,6 +175,40 @@ describe('política de validade máxima do PAT no GitLab (simulação → aplica
     expect([...fake.tokens.values()].some((t) => t.revoked)).toBe(false);
   });
 
+  it('simulação com PAT sem permissão de admin FALHA com o código certo (não fica "em andamento" para sempre)', async () => {
+    const gl = fake.addUser({ username: 'comum' });
+    const u = await seedUser('carol', 'user', { mustChangePassword: false });
+    await addToken(ctxFor(u), fake.addToken(gl.id, { scopes: ['api'] }).token);
+    const { scanId } = await startPatLifetimeSimulation(ctxFor(u), 90);
+    await vi.waitFor(async () => expect((await prisma.adminScan.findUniqueOrThrow({ where: { id: scanId } })).status).toBe('FAILED'), {
+      timeout: 15_000,
+    });
+    expect(await prisma.adminScan.findUniqueOrThrow({ where: { id: scanId } })).toMatchObject({
+      error: 'MISSING_CAPABILITY',
+      finishedAt: expect.any(Date),
+    });
+  });
+
+  it('o GitLab recusa o PUT (403): erro repassado, auditoria FAILURE com o código e NADA é revogado', async () => {
+    const w = await setup();
+    const { scanId } = await simulate(w.ctx, 90);
+    fake.fault({ match: /PUT \/application\/settings/, status: 403, body: { message: '403 Forbidden - sem licença' } });
+    expect(await code(applyGitLabPatLifetime(w.ctx, { scanId, days: 90, reason: why }))).toBe('GITLAB_FORBIDDEN');
+    const [a] = await prisma.auditLog.findMany({ where: { action: 'GITLAB_POLICY_PAT_LIFETIME_APPLIED' } });
+    expect(a).toMatchObject({ result: 'FAILURE', errorCode: 'GITLAB_FORBIDDEN' });
+    expect([...fake.tokens.values()].some((t) => t.revoked)).toBe(false);
+    expect(fake.instance.maxPatLifetime).toBeNull();
+  });
+
+  it('simulação ainda em andamento ou que falhou não pode ser aplicada (SCAN_NOT_READY)', async () => {
+    const w = await setup();
+    const running = await prisma.adminScan.create({
+      data: { id: crypto.randomUUID(), kind: 'PAT_LIFETIME', actorUserId: w.ctx.actor.id, params: { days: 90 }, status: 'RUNNING' },
+    });
+    expect(await code(applyGitLabPatLifetime(w.ctx, { scanId: running.id, days: 90, reason: why }))).toBe('SCAN_NOT_READY');
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(0);
+  });
+
   it('valor fora de 1–365 não inicia simulação; leitura do limite atual do GitLab', async () => {
     const w = await setup();
     for (const bad of [0, 366, 1.5]) expect(await code(startPatLifetimeSimulation(w.ctx, bad))).toBe('INVALID_SETTING');

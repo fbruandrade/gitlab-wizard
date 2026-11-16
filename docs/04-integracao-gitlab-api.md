@@ -115,6 +115,10 @@ Requisitos:
 - Erros convertidos em `GitLabApiError { status, code, retryable }`. O corpo bruto nunca chega ao usuário e só vai para o log depois de sanitizado.
 - O token nunca aparece em mensagens de erro, logs ou stack traces.
 
+### 3.1 Cofres de token de projeto (docs/13)
+
+`findGroup`, `listSubgroups`, `listGroupProjects` (`/groups/...`); `listProjectAccessTokens`, `createProjectAccessToken`, `revokeProjectAccessToken` (`/projects/:id/access_tokens`); `getGroupVariable`, `createGroupVariable`, `updateGroupVariable` (`/groups/:id/variables`). Leituras com retry; **escritas sem retry**. O valor do token de projeto só existe na resposta da criação e vai direto para a variável. A conferência usa `GET /personal_access_tokens/self` com o valor gravado. A capability `VAULT_TOKENS` exige scope `api` (o papel Maintainer é validado pelo próprio GitLab). **Validar na versão real:** o formato de `access_level`, o 403 para quem não é Maintainer, `masked`/`hidden` em variáveis e o teto de `expires_at`.
+
 ## 4. Mapeamento de erros
 
 | Situação | `code` interno | Mensagem ao usuário | Efeito |

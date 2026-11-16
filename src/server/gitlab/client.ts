@@ -5,7 +5,12 @@ import { env } from '@/server/env';
 import { logger } from '@/server/logger';
 import { GitLabApiError } from './errors';
 import {
+  accessTokenSchema,
   appSettingsSchema,
+  createdAccessTokenSchema,
+  groupSchema,
+  projectSchema,
+  variableSchema,
   currentUserSchema,
   licenseSchema,
   patListItemSchema,
@@ -14,7 +19,12 @@ import {
   rotatedTokenSchema,
   tokenInfoSchema,
   versionSchema,
+  type GitLabAccessToken,
+  type GitLabCreatedAccessToken,
   type GitLabCurrentUser,
+  type GitLabGroup,
+  type GitLabProject,
+  type GitLabVariable,
   type GitLabPat,
   type GitLabSshKey,
   type GitLabLicense,
@@ -57,6 +67,21 @@ function causeCode(err: unknown): string | undefined {
   const e = err as { code?: string; cause?: { code?: string } };
   return e?.cause?.code ?? e?.code;
 }
+
+export interface VariableWrite {
+  key: string;
+  value: string;
+  masked: boolean;
+  protected: boolean;
+  environmentScope: string;
+}
+const variableBody = (v: VariableWrite, withKey: boolean) => ({
+  ...(withKey && { key: v.key }),
+  value: v.value,
+  masked: v.masked,
+  protected: v.protected,
+  environment_scope: v.environmentScope,
+});
 
 export class GitLabClient {
   private readonly baseUrl: string;
@@ -132,6 +157,55 @@ export class GitLabClient {
   }
   async deleteUserSshKey(userId: number, keyId: number): Promise<void> {
     await this.request('DELETE', `/users/${userId}/keys/${keyId}`);
+  }
+
+  // ── cofre de tokens de projeto ──
+  /** Grupo por id ou caminho completo. 404 → null (para distinguir "não existe" de erro). */
+  async findGroup(idOrPath: string | number): Promise<GitLabGroup | null> {
+    try {
+      return await this.get(`/groups/${encodeURIComponent(String(idOrPath))}`, groupSchema);
+    } catch (e) {
+      if (e instanceof GitLabApiError && e.code === 'GITLAB_NOT_FOUND') return null;
+      throw e;
+    }
+  }
+  listSubgroups(groupId: number): Promise<GitLabGroup[]> {
+    return this.listAll(`/groups/${groupId}/subgroups`, groupSchema);
+  }
+  /** Só os projetos diretos do grupo (sem descer em subgrupos). */
+  listGroupProjects(groupId: number): Promise<GitLabProject[]> {
+    return this.listAll(`/groups/${groupId}/projects`, projectSchema, { include_subgroups: 'false', archived: 'false' });
+  }
+  listProjectAccessTokens(projectId: number): Promise<GitLabAccessToken[]> {
+    return this.listAll(`/projects/${projectId}/access_tokens`, accessTokenSchema, { state: 'active' });
+  }
+  /** Sem retry: criar é uma escrita, e o valor do token só é devolvido nesta resposta. */
+  async createProjectAccessToken(
+    projectId: number,
+    b: { name: string; scopes: string[]; accessLevel: number; expiresAt: string },
+  ): Promise<GitLabCreatedAccessToken> {
+    const { json } = await this.request('POST', `/projects/${projectId}/access_tokens`, {
+      body: { name: b.name, scopes: b.scopes, access_level: b.accessLevel, expires_at: b.expiresAt },
+    });
+    return this.parse(json, createdAccessTokenSchema);
+  }
+  async revokeProjectAccessToken(projectId: number, tokenId: number): Promise<void> {
+    await this.request('DELETE', `/projects/${projectId}/access_tokens/${tokenId}`);
+  }
+  /** Variável de grupo; 404 → null. */
+  async getGroupVariable(groupId: number, key: string): Promise<GitLabVariable | null> {
+    try {
+      return await this.get(`/groups/${groupId}/variables/${encodeURIComponent(key)}`, variableSchema);
+    } catch (e) {
+      if (e instanceof GitLabApiError && e.code === 'GITLAB_NOT_FOUND') return null;
+      throw e;
+    }
+  }
+  async createGroupVariable(groupId: number, v: VariableWrite): Promise<void> {
+    await this.request('POST', `/groups/${groupId}/variables`, { body: variableBody(v, true) });
+  }
+  async updateGroupVariable(groupId: number, v: VariableWrite): Promise<void> {
+    await this.request('PUT', `/groups/${groupId}/variables/${encodeURIComponent(v.key)}`, { body: variableBody(v, false) });
   }
 
   // ── configurações da instância (admin) ──
@@ -224,13 +298,8 @@ export class GitLabClient {
         lastError = err;
         await sleep(Math.min(Number(res.headers.get('retry-after')) * 1000 || 300 * 2 ** i, 3000));
       } catch (e) {
-        if (e instanceof GitLabApiError) {
-          if (e.retryable && i < attempts - 1) {
-            lastError = e;
-            continue;
-          }
-          throw e;
-        }
+        // Um GitLabApiError aqui já é DEFINITIVO (não retentável ou última tentativa): só repassa.
+        if (e instanceof GitLabApiError) throw e;
         const err = this.fromNetwork(e, o.ambiguousOnTimeout);
         if (!err.retryable || i === attempts - 1) throw err;
         lastError = err;

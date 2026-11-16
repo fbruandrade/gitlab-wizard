@@ -20,6 +20,7 @@
     "reencrypt-tokens": "tsx --conditions=react-server --env-file-if-exists=.env scripts/reencrypt-tokens.mts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test:coverage": "vitest run --config vitest.coverage.config.mts --coverage",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:e2e": "npm run build && playwright test"
   },
@@ -57,6 +58,7 @@
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@vitest/coverage-v8": "5.1.0",
     "auth": "1.7.22",
     "eslint": "10.14.0",
     "eslint-config-next": "16.4.6",

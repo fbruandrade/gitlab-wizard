@@ -10,5 +10,10 @@ export async function register() {
         'CLIENT_IP_HEADER não definido: o rate limit de login/2FA é compartilhado por todos os usuários. Configure o header do seu proxy reverso (ex.: x-forwarded-for).',
       );
     }
+    if (env.VAULT_AUTO_INTERVAL_MINUTES > 0) {
+      // Rotação automática dos cofres: só age se um admin a habilitou na tela (/admin/vault).
+      const { startVaultAutoScheduler } = await import('./server/services/vault-auto.service');
+      startVaultAutoScheduler(env.VAULT_AUTO_INTERVAL_MINUTES);
+    }
   }
 }

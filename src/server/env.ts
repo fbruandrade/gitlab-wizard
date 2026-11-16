@@ -63,6 +63,9 @@ const schema = z
 
     /** Habilita POST /api/internal/maintenance (Bearer). Sem o segredo, o endpoint responde 404. */
     MAINTENANCE_SECRET: z.string().min(32).optional(),
+
+    /** Intervalo (min) do agendador interno da rotação automática dos cofres (docs/13 §14). 0 = desligado; só age se habilitada na tela. */
+    VAULT_AUTO_INTERVAL_MINUTES: int(0, 1440).default(60),
   })
   .refine((e) => e.TOKEN_ENCRYPTION_KEYS.has(e.TOKEN_ENCRYPTION_ACTIVE_KEY), {
     path: ['TOKEN_ENCRYPTION_ACTIVE_KEY'],

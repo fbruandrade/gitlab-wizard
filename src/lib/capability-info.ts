@@ -3,6 +3,7 @@ export const CAPABILITIES = [
   { key: 'READ_USERS', label: 'Buscar usuários GitLab' },
   { key: 'ADMIN_USERS', label: 'Desbloquear usuário e resetar MFA' },
   { key: 'SELF_ROTATE', label: 'Rotacionar meu token' },
+  { key: 'VAULT_TOKENS', label: 'Gerir tokens dos cofres de projeto' },
 ] as const;
 
 export function missingReason(key: string, i: { isAdmin: boolean; scopes: string[]; adminMode: boolean }): string {
@@ -14,6 +15,8 @@ export function missingReason(key: string, i: { isAdmin: boolean; scopes: string
       if (!i.isAdmin) return 'Requer conta admin no GitLab.';
       if (!has('api')) return 'Requer scope `api`.';
       return 'Requer scope `admin_mode` (Admin Mode está ativo).';
+    case 'VAULT_TOKENS':
+      return 'Requer scope `api` e papel Maintainer no projeto-cofre e no grupo da aplicação.';
     default:
       return 'Requer scope `api` ou `self_rotate`.';
   }

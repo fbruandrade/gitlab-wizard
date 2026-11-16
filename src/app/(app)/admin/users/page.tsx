@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { requireAdminPage } from '@/server/auth/guards';
 import { listToolUsers } from '@/server/services/tool-user.service';
+import { PageHeader } from '@/components/common/page-header';
+import { ShieldUser } from 'lucide-react';
 
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
   const session = await requireAdminPage();
@@ -12,8 +14,8 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   const { items, pages } = await listToolUsers(sp.q?.trim() || undefined, page);
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Contas da ferramenta</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PageHeader icon={ShieldUser} tone="blue" title="Contas da ferramenta" />
         <CreateUserDialog />
       </div>
       <form method="get" className="flex gap-2" role="search">

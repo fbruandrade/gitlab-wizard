@@ -29,7 +29,7 @@ Versões **exatas** (`save-exact=true`, lockfile versionado) consultadas no npm 
 | `pino` | 10.4.0 | Logs com `redact` |
 
 ### Desenvolvimento
-`typescript` **6.0.3** · `prisma` 7.10.1 · `auth` 1.7.22 (CLI do better-auth) · `tailwindcss` + `@tailwindcss/postcss` 4.3.5 · `shadcn` 4.23.0 + `tw-animate-css` 1.4.0 (só CSS/CLI de build) · `eslint` 10.14.0 + `eslint-config-next` 16.4.6 · `prettier` 3.10.1 · `vitest` 5.1.0 · `@playwright/test` 1.65.0 + `@axe-core/playwright` 4.14.0 · `@testcontainers/postgresql` 12.2.1 · `otpauth` 9.6.0 · `tsx` 4.23.15 · `pino-pretty`.
+`typescript` **6.0.3** · `prisma` 7.10.1 · `auth` 1.7.22 (CLI do better-auth) · `tailwindcss` + `@tailwindcss/postcss` 4.3.5 · `shadcn` 4.23.0 + `tw-animate-css` 1.4.0 (só CSS/CLI de build) · `eslint` 10.14.0 + `eslint-config-next` 16.4.6 · `prettier` 3.10.1 · `vitest` 5.1.0 + `@vitest/coverage-v8` 5.1.0 · `@playwright/test` 1.65.0 + `@axe-core/playwright` 4.14.0 · `@testcontainers/postgresql` 12.2.1 · `otpauth` 9.6.0 · `tsx` 4.23.15 · `pino-pretty`.
 
 ## 3. Incompatibilidades e decisões
 

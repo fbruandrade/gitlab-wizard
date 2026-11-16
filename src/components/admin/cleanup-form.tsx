@@ -21,11 +21,12 @@ export function CleanupForm({ defaultDays, savedDays }: { defaultDays: number; s
   const [days, setDays] = useState(String(defaultDays));
   const [includePat, setPat] = useState(true);
   const [includeSsh, setSsh] = useState(true);
+  const [sshNoExpiry, setNoExpiry] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const n = Number(days);
-  const params = { blockedUsers, unusedDays: useUnused ? n : null, includePat, includeSsh };
+  const params = { blockedUsers, unusedDays: useUnused ? n : null, includePat, includeSsh, sshNoExpiry };
   const invalid = validateCleanupParams(params);
 
   async function start() {
@@ -96,6 +97,13 @@ export function CleanupForm({ defaultDays, savedDays }: { defaultDays: number; s
             </Button>
           </Label>
         </div>
+        <label className={box}>
+          <input type="checkbox" checked={sshNoExpiry} onChange={(e) => setNoExpiry(e.target.checked)} data-testid="crit-noexpiry" />
+          <span>
+            <strong>Chaves SSH sem prazo de validade</strong> (todas as cadastradas, mesmo em uso). Útil quando o GitLab não informa o
+            último uso da chave e não dá para saber se está parada.
+          </span>
+        </label>
       </fieldset>
 
       <fieldset className="space-y-2">

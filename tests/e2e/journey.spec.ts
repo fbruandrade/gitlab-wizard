@@ -658,6 +658,22 @@ test.describe('limpeza de credenciais', () => {
     expect((await control.get<{ revoked: boolean }>(`/tokens/${newAdminPat}`)).revoked).toBe(false);
     await control.post(`/tokens/${newAdminPat}/patch`, { last_used_at: new Date().toISOString() }); // restaura
   });
+
+  test('chaves SSH sem prazo de validade: lista também a chave sem dado de último uso (dry-run)', async () => {
+    await admin.page.goto('/admin/cleanup');
+    await admin.page.getByTestId('crit-blocked').uncheck();
+    await admin.page.getByTestId('crit-unused').uncheck();
+    await expect(admin.page.getByTestId('start-scan')).toBeDisabled();
+    await admin.page.getByTestId('crit-noexpiry').check();
+    await admin.page.getByTestId('type-pat').uncheck();
+    await admin.page.getByTestId('start-scan').click();
+    const table = admin.page.getByTestId('cleanup-table');
+    await expect(table).toBeVisible({ timeout: 30_000 });
+    await expect(table).toContainText('key-sem-campo'); // antes ficava de fora: o GitLab não informa o último uso
+    await expect(table.locator('tr', { hasText: 'key-sem-campo' })).toContainText('Sem validade');
+    await expect(admin.page.getByTestId('scan-summary')).toContainText('chave(s) SSH sem validade');
+    expect((await control.get<unknown[]>('/keys')).length).toBeGreaterThanOrEqual(1); // nada foi removido
+  });
 });
 
 test.describe('políticas: validade máxima do PAT', () => {
@@ -777,7 +793,7 @@ test.describe('administração da ferramenta', () => {
     await expect(p).toHaveURL(/\/$/);
     await p.goto('/admin/audit');
     await expect(p).toHaveURL(/\/$/);
-    for (const path of ['/admin/cleanup', '/admin/policies']) {
+    for (const path of ['/admin/cleanup', '/admin/policies', '/admin/vault']) {
       await p.goto(path);
       await expect(p).toHaveURL(/\/$/);
     }
@@ -914,6 +930,7 @@ test.describe('acessibilidade (axe, WCAG 2.1 AA)', () => {
     '/admin/audit',
     '/admin/cleanup',
     '/admin/policies',
+    '/admin/vault',
     '/account/security',
     '/history',
   ];
@@ -941,6 +958,155 @@ test.describe('acessibilidade (axe, WCAG 2.1 AA)', () => {
     const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([]);
     await ctx.close();
+  });
+});
+
+test.describe('cofres de token de projeto', () => {
+  const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+  let projectId = 0;
+  let appGroupId = 0;
+  let oldToken = { id: 0, token: '' };
+
+  test('a tela aparece no menu e a configuração padrão vem preenchida', async () => {
+    await admin.page.goto('/');
+    await admin.page.getByRole('link', { name: 'Cofres de token' }).click();
+    await expect(admin.page.getByRole('heading', { name: 'Cofres de token' })).toBeVisible();
+    await expect(admin.page.getByTestId('vault-root')).toHaveValue('seguranca-corporativa');
+    await expect(admin.page.getByTestId('vault-warn')).toHaveValue('30');
+    await expect(admin.page.getByTestId('vault-life')).toHaveValue('180');
+  });
+
+  test('varredura (dry-run) mostra validade, escopos e o plano, sem alterar o GitLab', async () => {
+    const root = await control.post<{ id: number }>('/groups', { path: 'seguranca-corporativa' });
+    const hml = await control.post<{ id: number }>('/groups', { path: 'hml', parentId: root.id });
+    const app = await control.post<{ id: number }>('/groups', { path: 'areacorp-jks' });
+    appGroupId = app.id;
+    projectId = (await control.post<{ id: number }>('/projects', { groupId: hml.id, path: 'areacorp-jks' })).id;
+    oldToken = await control.post<{ id: number; token: string }>('/project-tokens', {
+      projectId,
+      name: 'cofre-hml-20260101',
+      scopes: ['read_api'],
+      expires_at: inDays(7),
+    });
+    await control.post('/variables', { groupId: appGroupId, key: 'PID_HML', value: String(projectId) });
+    await control.post('/variables', { groupId: appGroupId, key: 'DEVOPS_HML', value: oldToken.token });
+
+    await admin.page.goto('/admin/vault');
+    await admin.page.getByTestId('vault-scan').click();
+    const table = admin.page.getByTestId('vault-table');
+    await expect(table).toBeVisible({ timeout: 30_000 });
+    const row = table.locator('tr', { hasText: 'areacorp-jks' });
+    await expect(row).toContainText('Vence em breve');
+    await expect(row.getByTestId('scopes')).toContainText('read_api');
+    await expect(row).toContainText('Maintainer');
+    await expect(row.getByTestId('vault-plan')).toContainText('DEVOPS_HML');
+    await expect(row.getByTestId('vault-plan')).toContainText('só depois de validar o novo');
+    await expect(admin.page.getByTestId('vault-sum-actionable')).toHaveText('1');
+    const vars = await control.get<{ key: string; value: string }[]>('/variables');
+    expect(vars.find((v) => v.key === 'DEVOPS_HML')!.value).toBe(oldToken.token); // nada mudou
+    const axe = await new AxeBuilder({ page: admin.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    expect(axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]); // tabela com dados
+  });
+
+  test('aplicar exige motivo + APLICAR; rotaciona, grava a variável e revoga o antigo sem expor o valor', async () => {
+    await admin.page.getByTestId('vault-select-all').check();
+    await admin.page.getByTestId('vault-apply-open').click();
+    const confirm = admin.page.getByTestId('vault-apply-confirm');
+    await expect(confirm).toBeDisabled();
+    await admin.page.getByLabel('Motivo / nº do chamado *').fill('CHG0777 - rotação programada');
+    await admin.page.getByLabel(/Digite APLICAR/).fill('aplicar');
+    await expect(confirm).toBeDisabled();
+    await admin.page.getByLabel(/Digite APLICAR/).fill('APLICAR');
+    await confirm.click();
+    await expect(admin.page.getByTestId('vault-exec-result')).toContainText('1 concluído(s)');
+
+    const vars = await control.get<{ groupId: number; key: string; value: string }[]>('/variables');
+    const devops = vars.find((v) => v.key === 'DEVOPS_HML')!;
+    expect(devops.value).not.toBe(oldToken.token);
+    const toks = await control.get<{ id: number; token: string; revoked: boolean }[]>('/project-tokens');
+    expect(toks.find((t) => t.id === oldToken.id)!.revoked).toBe(true);
+    expect(toks.find((t) => t.token === devops.value)!.revoked).toBe(false);
+    // o valor do token nunca aparece na tela
+    await expect(admin.page.locator('body')).not.toContainText(devops.value);
+    const audit = await sql<{ metadata: unknown }>("SELECT metadata FROM audit_log WHERE action LIKE 'VAULT_%'");
+    expect(JSON.stringify(audit)).not.toContain(devops.value);
+    expect(
+      await sql(
+        "SELECT 1 FROM audit_log WHERE action='VAULT_TOKEN_ROTATED' AND result='SUCCESS' AND reason='CHG0777 - rotação programada'",
+      ),
+    ).toHaveLength(1);
+
+    // nova varredura: tudo em ordem
+    await admin.page.goto('/admin/vault');
+    await admin.page.getByTestId('vault-scan').click();
+    await expect(admin.page.getByTestId('vault-table').locator('tr', { hasText: 'areacorp-jks' })).toContainText('OK', { timeout: 30_000 });
+  });
+
+  test('forçar renovação inclui o cofre que está OK no plano, marcado como forçado, e rotaciona', async () => {
+    await admin.page.goto('/admin/vault');
+    await admin.page.getByTestId('vault-force').check();
+    await admin.page.getByTestId('vault-scan').click();
+    const row = admin.page.getByTestId('vault-table').locator('tr', { hasText: 'areacorp-jks' });
+    await expect(row).toContainText('OK', { timeout: 30_000 });
+    await expect(row.getByTestId('vault-forced')).toBeVisible();
+    const antes = (await control.get<{ key: string; value: string }[]>('/variables')).find((v) => v.key === 'DEVOPS_HML')!.value;
+
+    await admin.page.getByTestId('vault-select-all').check();
+    await admin.page.getByTestId('vault-apply-open').click();
+    await admin.page.getByLabel('Motivo / nº do chamado *').fill('SEC0001 - renovação forçada preventiva');
+    await admin.page.getByLabel(/Digite APLICAR/).fill('APLICAR');
+    await admin.page.getByTestId('vault-apply-confirm').click();
+    await expect(admin.page.getByTestId('vault-exec-result')).toContainText('1 concluído(s)');
+    const depois = (await control.get<{ key: string; value: string }[]>('/variables')).find((v) => v.key === 'DEVOPS_HML')!.value;
+    expect(depois).not.toBe(antes);
+    const toks = await control.get<{ token: string; revoked: boolean }[]>('/project-tokens');
+    expect(toks.find((t) => t.token === antes)!.revoked).toBe(true);
+    expect(await sql("SELECT 1 FROM audit_log WHERE action='VAULT_TOKEN_ROTATED' AND metadata->>'forced'='true'")).toHaveLength(1);
+  });
+});
+
+test.describe('cofres de token: rotação automática', () => {
+  const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
+  test('habilitar na tela; o gatilho externo rotaciona só o que vence e mostra a última execução', async ({ request }) => {
+    const root = (await control.get<{ path: string; id: number }[]>('/groups-list')).find((g) => g.path === 'seguranca-corporativa')!;
+    const hml = await control.post<{ id: number }>('/groups', { path: 'prd', parentId: root.id });
+    const app = await control.post<{ id: number }>('/groups', { path: 'auto-app' });
+    const proj = await control.post<{ id: number }>('/projects', { groupId: hml.id, path: 'auto-app' });
+    const old = await control.post<{ id: number; token: string }>('/project-tokens', {
+      projectId: proj.id,
+      name: 'cofre-prd-20260101',
+      scopes: ['read_api'],
+      expires_at: inDays(3),
+    });
+    await control.post('/variables', { groupId: app.id, key: 'PID_PRD', value: String(proj.id) });
+    await control.post('/variables', { groupId: app.id, key: 'DEVOPS_PRD', value: old.token });
+
+    await admin.page.goto('/admin/vault');
+    await expect(admin.page.getByTestId('vault-auto-state')).toHaveText('desabilitada');
+    // desabilitada: o gatilho não faz nada
+    const headers = { authorization: `Bearer ${state().maintenanceSecret}` };
+    const off = await request.post('/api/internal/vault-auto', { headers });
+    expect(await off.json()).toEqual({ ran: false, reason: 'DISABLED' });
+
+    await admin.page.getByTestId('vault-auto-toggle').click();
+    await expect(admin.page.getByTestId('vault-auto-state')).toHaveText('habilitada');
+
+    const res = await request.post('/api/internal/vault-auto', { headers });
+    const body = (await res.json()) as { ran: boolean; status: { candidates: number; done: number; problem: string | null } };
+    expect(body).toMatchObject({ ran: true, status: { candidates: 1, done: 1, problem: null } });
+    const vars = await control.get<{ key: string; value: string }[]>('/variables');
+    expect(vars.find((v) => v.key === 'DEVOPS_PRD')!.value).not.toBe(old.token);
+    const toks = await control.get<{ id: number; revoked: boolean }[]>('/project-tokens');
+    expect(toks.find((t) => t.id === old.id)!.revoked).toBe(true);
+    expect(JSON.stringify(body)).not.toContain(old.token);
+
+    await admin.page.reload();
+    await expect(admin.page.getByTestId('vault-auto-status')).toContainText('1 candidato(s): 1 concluído(s)');
+    expect(await sql("SELECT 1 FROM audit_log WHERE action='VAULT_TOKEN_ROTATED' AND metadata->>'auto'='true'")).toHaveLength(1);
+
+    await admin.page.getByTestId('vault-auto-toggle').click();
+    await expect(admin.page.getByTestId('vault-auto-state')).toHaveText('desabilitada');
   });
 });
 

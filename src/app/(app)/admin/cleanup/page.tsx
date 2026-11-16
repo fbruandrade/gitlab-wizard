@@ -5,13 +5,15 @@ import { ScanStatus } from '@/components/admin/scan-status';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CleanupItem } from '@/lib/cleanup-rules';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, scanStatusLabel } from '@/lib/format';
 import { messageFor } from '@/lib/messages';
 import { href } from '@/lib/routes';
 import { requireAdminPage } from '@/server/auth/guards';
 import { getScan, recentScans } from '@/server/services/cleanup.service';
 import { resolveSelectedToken } from '@/server/token-selection';
 import { getSettings } from '@/server/services/settings.service';
+import { PageHeader } from '@/components/common/page-header';
+import { Eraser } from 'lucide-react';
 
 export default async function CleanupPage({ searchParams }: { searchParams: Promise<{ scan?: string }> }) {
   const session = await requireAdminPage();
@@ -26,12 +28,9 @@ export default async function CleanupPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Limpeza de credenciais</h1>
-        <p className="text-sm text-muted-foreground">
-          Revoga tokens e chaves SSH de usuários bloqueados e/ou sem uso. Sempre começa por uma simulação.
-        </p>
-      </div>
+      <PageHeader icon={Eraser} tone="rose" title="Limpeza de credenciais">
+        Revoga tokens e chaves SSH de usuários bloqueados, sem uso e/ou sem validade. Sempre começa por uma simulação.
+      </PageHeader>
 
       {!canAdmin ? (
         <Alert data-testid="cleanup-no-cap">
@@ -85,7 +84,7 @@ export default async function CleanupPage({ searchParams }: { searchParams: Prom
                         {formatDateTime(r.createdAt)}
                       </Link>
                       <span className="text-muted-foreground">
-                        {r.status}
+                        {scanStatusLabel(r.status)}
                         {r.summary ? ` · ${(r.summary as { selectable?: number }).selectable ?? 0} revogáveis` : ''}
                       </span>
                     </li>

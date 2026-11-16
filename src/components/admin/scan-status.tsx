@@ -7,6 +7,8 @@ const PHASES: Record<string, string> = {
   users: 'Lendo usuários',
   tokens: 'Lendo tokens',
   keys: 'Lendo chaves SSH',
+  groups: 'Lendo grupos e projetos',
+  vaults: 'Inspecionando cofres',
   classify: 'Classificando',
   done: 'Concluída',
 };

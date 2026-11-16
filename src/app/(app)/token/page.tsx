@@ -16,6 +16,8 @@ import { env } from '@/server/env';
 import { listTokens, withGitLab } from '@/server/services/gitlab-token.service';
 import { getSettings } from '@/server/services/settings.service';
 import { getSelectedTokenId } from '@/server/token-selection';
+import { PageHeader } from '@/components/common/page-header';
+import { KeyRound } from 'lucide-react';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000);
@@ -49,7 +51,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
   return (
     <TokenSecretHost>
       <div className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold">Meus tokens GitLab</h1>
+        <PageHeader icon={KeyRound} tone="amber" title="Meus tokens GitLab" />
 
         {notice && (
           <Alert variant="destructive" role="alert">
@@ -109,7 +111,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
                           }
                         >
                           {ok ? (
-                            <Check className="mt-0.5 size-4 text-emerald-600" aria-label="permite" />
+                            <Check className="mt-0.5 size-4 text-success" aria-label="permite" />
                           ) : (
                             <X className="mt-0.5 size-4 text-destructive" aria-label="não permite" />
                           )}
@@ -179,7 +181,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
                 {history.map((h) => (
                   <li key={h.id} className="flex justify-between gap-3 py-2">
                     <span>
-                      #{h.gitlabTokenId} {h.name} <Badge variant={h.status === 'ACTIVE' ? 'default' : 'outline'}>{h.status}</Badge>
+                      #{h.gitlabTokenId} {h.name} <Badge variant={h.status === 'ACTIVE' ? 'success' : 'outline'}>{h.status}</Badge>
                     </span>
                     <span className="text-muted-foreground">
                       vinculado {formatDate(h.createdAt)} · expira {formatDate(h.expiresAt)}

@@ -18,7 +18,8 @@ import { formatDate } from '@/lib/format';
 import { reasonSchema } from '@/lib/schemas';
 
 const MAX_ROWS = 1000;
-const REASON_LABEL = { USER_BLOCKED: 'Usuário bloqueado', UNUSED: 'Sem uso' } as const;
+const REASON_LABEL = { USER_BLOCKED: 'Usuário bloqueado', UNUSED: 'Sem uso', NO_EXPIRY: 'Sem validade' } as const;
+const REASON_TONE = { USER_BLOCKED: 'destructive', UNUSED: 'warning', NO_EXPIRY: 'info' } as const;
 const PROTECTED_LABEL = { SELF: 'Sua própria conta', LINKED_IN_TOOL: 'Em uso nesta ferramenta' } as const;
 const CODE_LABEL: Record<string, string> = { CHANGED: 'mudou desde a varredura', ABORTED: 'execução interrompida' };
 
@@ -31,6 +32,7 @@ interface Summary {
   sshKey: number;
   blocked: number;
   unused: number;
+  noExpiry?: number;
   excluded: { bots: number; unknownOwner: number };
   sshLastUsedUnavailable: boolean;
 }
@@ -111,6 +113,7 @@ export function CleanupResults({ scanId, items, summary }: { scanId: string; ite
         )}
         <span>
           {summary.blocked} por usuário bloqueado · {summary.unused} por falta de uso
+          {summary.noExpiry ? ` · ${summary.noExpiry} chave(s) SSH sem validade` : ''}
         </span>
         <span className="text-muted-foreground">
           {summary.usersScanned} usuários lidos · {summary.protected} protegido(s) · {summary.excluded.bots} de bots ignorado(s)
@@ -121,7 +124,8 @@ export function CleanupResults({ scanId, items, summary }: { scanId: string; ite
         <Alert data-testid="ssh-warning">
           <AlertDescription>
             O GitLab <strong>não informou o último uso de algumas chaves SSH</strong> (campo ausente). Essas chaves <strong>não</strong>{' '}
-            foram consideradas “sem uso” (sem dado, não se revoga); só entram se o usuário estiver bloqueado.
+            foram consideradas “sem uso” (sem dado, não se revoga); só entram se o usuário estiver bloqueado ou se você marcar “chaves SSH
+            sem prazo de validade” na varredura.
           </AlertDescription>
         </Alert>
       )}
@@ -150,7 +154,7 @@ export function CleanupResults({ scanId, items, summary }: { scanId: string; ite
 
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="scan-empty">
-          Nada a revogar com estes critérios.
+          Casa limpa: nada a revogar com estes critérios.
         </p>
       ) : (
         <>
@@ -246,7 +250,7 @@ export function CleanupResults({ scanId, items, summary }: { scanId: string; ite
                   </TableCell>
                   <TableCell>{i.kind === 'PAT' ? 'Token' : 'Chave SSH'}</TableCell>
                   <TableCell>
-                    {i.username} <Badge variant={i.userState === 'active' ? 'secondary' : 'destructive'}>{i.userState}</Badge>
+                    {i.username} <Badge variant={i.userState === 'active' ? 'success' : 'destructive'}>{i.userState}</Badge>
                   </TableCell>
                   <TableCell className="max-w-48 truncate" title={i.name}>
                     {i.name}
@@ -258,7 +262,7 @@ export function CleanupResults({ scanId, items, summary }: { scanId: string; ite
                   <TableCell>{formatDate(i.createdAt)}</TableCell>
                   <TableCell className="space-x-1">
                     {i.reasons.map((r) => (
-                      <Badge key={r} variant="outline">
+                      <Badge key={r} variant={REASON_TONE[r]}>
                         {REASON_LABEL[r]}
                       </Badge>
                     ))}

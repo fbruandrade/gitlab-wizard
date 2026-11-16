@@ -41,6 +41,12 @@ export const ERROR_MESSAGES: Record<string, string> = {
   SCAN_NOT_READY: 'A varredura ainda não terminou ou falhou.',
   SCAN_STALE: 'A varredura é antiga demais. Refaça a varredura antes de executar.',
   ITEMS_NOT_IN_SCAN: 'Há itens que não constam na varredura ou que são protegidos.',
+  VAULT_ROOT_NOT_FOUND: 'Grupo raiz dos cofres não encontrado (ou sem acesso). Confira o caminho nas configurações do cofre.',
+  ACTOR_UNAVAILABLE: 'Quem habilitou a rotação automática não está mais disponível (banido ou sem papel de admin). Habilite de novo.',
+  TOKEN_UNAVAILABLE: 'O token GitLab usado pela rotação automática não está mais ativo. Habilite de novo com outro token.',
+  NEEDS_ATTENTION: 'Resultado incerto: o token novo foi mantido ativo. Confira a variável no grupo antes de repetir.',
+  VERIFY_FAILED: 'O token novo foi criado e gravado, mas a validação falhou. O token antigo foi mantido.',
+  OLD_NOT_REVOKED: 'O token novo está em uso, mas o antigo não pôde ser revogado. Revogue-o manualmente.',
   INVALID_SETTING: 'Valor inválido para a configuração.',
   SIMULATION_REQUIRED: 'Faça a simulação (dry-run) com este mesmo valor antes de aplicar no GitLab.',
   GITLAB_SETTING_NOT_APPLIED:

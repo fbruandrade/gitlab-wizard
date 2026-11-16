@@ -94,3 +94,51 @@ export interface Paginated<T> {
   nextPage: number | null;
   totalPages: number | null;
 }
+
+// ── cofre de tokens de projeto ──
+export const groupSchema = z.looseObject({
+  id: z.number().int(),
+  name: z.string(),
+  path: z.string(),
+  full_path: z.string(),
+  parent_id: z.number().int().nullish(),
+});
+export type GitLabGroup = z.infer<typeof groupSchema>;
+
+export const projectSchema = z.looseObject({
+  id: z.number().int(),
+  name: z.string(),
+  path: z.string(),
+  path_with_namespace: z.string(),
+});
+export type GitLabProject = z.infer<typeof projectSchema>;
+
+/** Token de acesso de projeto/grupo (GET /projects/:id/access_tokens). */
+export const accessTokenSchema = z.looseObject({
+  id: z.number().int(),
+  name: z.string(),
+  scopes: z.array(z.string()).optional().default([]),
+  created_at: z.string().nullish(),
+  last_used_at: z.string().nullish(),
+  expires_at: z.string().nullish(),
+  active: z.boolean().optional().default(true),
+  revoked: z.boolean().optional().default(false),
+  access_level: z.number().int().nullish(),
+});
+export type GitLabAccessToken = z.infer<typeof accessTokenSchema>;
+
+export const createdAccessTokenSchema = accessTokenSchema.extend({ token: z.string().min(1) });
+export type GitLabCreatedAccessToken = z.infer<typeof createdAccessTokenSchema>;
+
+export const variableSchema = z.looseObject({
+  key: z.string(),
+  // Variável oculta (hidden) não devolve o valor.
+  value: z.string().nullish(),
+  protected: z.boolean().optional().default(false),
+  masked: z.boolean().optional().default(false),
+  hidden: z.boolean().optional().default(false),
+  raw: z.boolean().optional(),
+  environment_scope: z.string().optional().default('*'),
+  variable_type: z.string().optional(),
+});
+export type GitLabVariable = z.infer<typeof variableSchema>;

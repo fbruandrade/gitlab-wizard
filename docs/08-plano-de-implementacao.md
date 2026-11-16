@@ -136,3 +136,13 @@ Estimativas para **1 dev full-stack**. Com 2 devs, as fases 4 e 5 podem andar em
 - Nenhum token, senha ou segredo em logs, respostas ou HTML (verificado por teste).
 - Revisão de código aprovada.
 - `docs/` atualizado se o comportamento divergir da especificação.
+
+
+## Fase 8 — Cofres de token de projeto
+
+- [x] V1 regras puras (`vault-rules.ts`), capability `VAULT_TOKENS`, migrações, GitLab falso estendido.
+- [x] V2 varredura/inventário (somente leitura) + tela `/admin/vault`.
+- [x] V3 criar token + variáveis (dry-run, aplicar, auditoria).
+- [x] V4 rotacionar (criar → gravar → validar → revogar) com tratamento de falhas parciais.
+- [x] V5 configuração na tela, E2E e documentação. Detalhes e diferenças do plano: [13](13-cofre-de-tokens-de-projeto.md).
+- [ ] V0 validar endpoints/papéis na versão real do GitLab e conferir como os tokens atuais dos cofres foram criados.

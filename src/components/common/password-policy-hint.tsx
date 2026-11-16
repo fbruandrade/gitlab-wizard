@@ -7,7 +7,7 @@ export function PasswordPolicyHint({ value }: { value: string }) {
       {PASSWORD_RULES.map((r) => {
         const ok = r.test(value);
         return (
-          <li key={r.id} className={ok ? 'text-emerald-600' : 'text-muted-foreground'}>
+          <li key={r.id} className={ok ? 'text-success' : 'text-muted-foreground'}>
             {ok ? <Check className="mr-1 inline size-3" /> : <Circle className="mr-1 inline size-3" />}
             {r.label}
           </li>

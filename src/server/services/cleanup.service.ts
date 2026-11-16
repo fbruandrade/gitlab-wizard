@@ -95,7 +95,10 @@ export async function runCleanupScan(ctx: Ctx, scanId: string): Promise<void> {
       if (params.includeSsh) {
         // Chaves: usuários bloqueados (critério 1) e/ou TODOS os humanos (critério "sem uso"; só dá para listar por usuário).
         const targets = [...users.values()].filter(
-          (u) => !u.bot && u.id !== row.gitlabUserId && (params.unusedDays !== null || (params.blockedUsers && isBlockedState(u.state))),
+          (u) =>
+            !u.bot &&
+            u.id !== row.gitlabUserId &&
+            (params.unusedDays !== null || Boolean(params.sshNoExpiry) || (params.blockedUsers && isBlockedState(u.state))),
         );
         let done = 0;
         await progress({ phase: 'keys', done: 0, total: targets.length }, true);
@@ -125,6 +128,7 @@ export async function runCleanupScan(ctx: Ctx, scanId: string): Promise<void> {
       sshKey: result.items.filter((i) => i.kind === 'SSH_KEY').length,
       blocked: result.items.filter((i) => i.reasons.includes('USER_BLOCKED')).length,
       unused: result.items.filter((i) => i.reasons.includes('UNUSED')).length,
+      noExpiry: result.items.filter((i) => i.reasons.includes('NO_EXPIRY')).length,
       excluded: result.excluded,
       sshLastUsedUnavailable: result.sshLastUsedUnavailable,
     };
@@ -163,7 +167,7 @@ export async function runCleanupScan(ctx: Ctx, scanId: string): Promise<void> {
 }
 
 /** Lê uma varredura; uma RUNNING sem sinal de vida há muito tempo vira FAILED (o processo pode ter reiniciado). */
-export async function getScan(scanId: string, actorUserId: string, kind?: 'CLEANUP' | 'PAT_LIFETIME') {
+export async function getScan(scanId: string, actorUserId: string, kind?: 'CLEANUP' | 'PAT_LIFETIME' | 'VAULT') {
   const scan = await prisma.adminScan.findFirst({ where: { id: scanId, actorUserId, ...(kind && { kind }) } });
   if (!scan) return null;
   if (scan.status === 'RUNNING' && Date.now() - scan.updatedAt.getTime() > STALE_MS) {
@@ -172,7 +176,7 @@ export async function getScan(scanId: string, actorUserId: string, kind?: 'CLEAN
   return scan;
 }
 
-export const recentScans = (actorUserId: string, kind: 'CLEANUP' | 'PAT_LIFETIME', take = 5) =>
+export const recentScans = (actorUserId: string, kind: 'CLEANUP' | 'PAT_LIFETIME' | 'VAULT', take = 5) =>
   prisma.adminScan.findMany({
     where: { actorUserId, kind },
     orderBy: { createdAt: 'desc' },

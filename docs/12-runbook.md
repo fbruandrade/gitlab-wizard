@@ -31,6 +31,9 @@ Sem nenhuma das duas, o erro mostrado é `GITLAB_TLS_ERROR` com a orientação.
 ```yaml
 # CronJob (exemplo): diário
 curl -fsS -X POST -H "Authorization: Bearer $MAINTENANCE_SECRET" https://wizard.empresa.com/api/internal/maintenance
+
+# (opcional) gatilho externo da rotação automática dos cofres; o agendador interno (VAULT_AUTO_INTERVAL_MINUTES) já faz isso
+curl -fsS -X POST -H "Authorization: Bearer $MAINTENANCE_SECRET" https://wizard.empresa.com/api/internal/vault-auto
 ```
 Remove sessões vencidas há 7+ dias, rate limits e verificações antigos, **varreduras da limpeza/simulações com 30+ dias** e **zera o ciphertext** de PATs inativos há 30+ dias. Idempotente.
 

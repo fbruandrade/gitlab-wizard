@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { ReauthProvider } from '@/components/auth/reauth-provider';
+import { BrandMark } from '@/components/common/brand-mark';
+import { MobileNav } from '@/components/layout/mobile-nav';
 import { Nav, type NavItem } from '@/components/layout/nav';
 import { SignOutButton } from '@/components/layout/sign-out-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -21,17 +23,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const left = daysUntil(token?.expiresAt);
 
   const items: NavItem[] = [
-    { href: '/', label: 'Início' },
-    ...(token?.capabilities.includes('READ_USERS') ? [{ href: '/gitlab/users', label: 'Usuários GitLab' }] : []),
-    { href: '/token', label: 'Meu token GitLab' },
-    { href: '/history', label: 'Histórico' },
-    { href: '/account/security', label: 'Minha conta' },
+    { href: '/', label: 'Início', icon: 'home' },
+    ...(token?.capabilities.includes('READ_USERS') ? [{ href: '/gitlab/users', label: 'Usuários GitLab', icon: 'users' as const }] : []),
+    { href: '/token', label: 'Meu token GitLab', icon: 'token' },
+    { href: '/history', label: 'Histórico', icon: 'history' },
+    { href: '/account/security', label: 'Minha conta', icon: 'account' },
     ...(isAdmin
       ? [
-          { href: '/admin/users', label: 'Contas da ferramenta' },
-          { href: '/admin/cleanup', label: 'Limpeza de credenciais' },
-          { href: '/admin/policies', label: 'Políticas' },
-          { href: '/admin/audit', label: 'Auditoria' },
+          { href: '/admin/users', label: 'Contas da ferramenta', icon: 'toolUsers' as const, group: 'Administração' },
+          { href: '/admin/cleanup', label: 'Limpeza de credenciais', icon: 'cleanup' as const, group: 'Administração' },
+          { href: '/admin/vault', label: 'Cofres de token', icon: 'vault' as const, group: 'Administração' },
+          { href: '/admin/policies', label: 'Políticas', icon: 'policies' as const, group: 'Administração' },
+          { href: '/admin/audit', label: 'Auditoria', icon: 'audit' as const, group: 'Administração' },
         ]
       : []),
   ];
@@ -39,13 +42,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ReauthProvider username={session.user.username ?? ''}>
       <div className="flex min-h-screen">
-        <aside className="hidden w-56 shrink-0 border-r md:block">
-          <div className="p-4 text-lg font-semibold">GitLab Wizard</div>
+        <aside className="hidden w-60 shrink-0 bg-sidebar text-sidebar-foreground md:block">
+          <div className="flex items-center gap-2.5 p-4 text-lg font-semibold">
+            <BrandMark className="size-8" />
+            GitLab Wizard
+          </div>
           <Nav items={items} />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center justify-between gap-3 border-b px-4 py-2">
-            <div className="flex items-center gap-2 text-sm">
+          <header className="relative flex items-center justify-between gap-3 border-b bg-card px-4 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+              <MobileNav items={items} />
               {token ? (
                 tokens.length > 1 ? (
                   <TokenSwitcher
@@ -75,8 +82,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span data-testid="whoami">{session.user.name}</span>
+            <div className="flex shrink-0 items-center gap-2 text-sm">
+              <span data-testid="whoami" className="hidden sm:inline">
+                {session.user.name}
+              </span>
               {isAdmin && <Badge>admin</Badge>}
               <SignOutButton />
             </div>

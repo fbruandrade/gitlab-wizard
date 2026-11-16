@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   classify,
+  isBotUser,
   isPrivilegedScope,
   isUnused,
-  usageTypeLabel,
-  validateCleanupParams,
   type ClassifyInput,
   type CleanupParams,
+  usageTypeLabel,
+  validateCleanupParams,
 } from '@/lib/cleanup-rules';
 
 const NOW = new Date('2026-11-13T12:00:00Z');
@@ -149,11 +150,57 @@ describe('classify — chaves SSH', () => {
   });
 });
 
+describe('classify — chaves SSH sem validade', () => {
+  const keys = (u: number, ...k: object[]) =>
+    new Map([[u, k.map((x, i) => ({ id: 100 + i, title: `k${i}`, created_at: daysAgo(10), ...x }))]]);
+  const only = { blockedUsers: false, unusedDays: null, sshNoExpiry: true };
+
+  it('lista TODAS as chaves sem expires_at, mesmo sem dado de último uso e mesmo em uso recente', () => {
+    const r = classify(
+      base({
+        params: only,
+        keysByUser: keys(
+          2,
+          {},
+          { last_used_at: daysAgo(1) },
+          { last_used_at: null },
+          { expires_at: '2030-01-01' },
+          { expires_at: '2020-01-01' },
+        ),
+      }),
+    );
+    expect(r.items.map((i) => i.credentialId)).toEqual([100, 101, 102]);
+    expect(r.items.every((i) => i.reasons.join() === 'NO_EXPIRY')).toBe(true);
+    expect(r.sshLastUsedUnavailable).toBe(true); // o aviso continua valendo para o critério "sem uso"
+  });
+  it('combina com os outros critérios (motivos somados) e não toca em tokens', () => {
+    const r = classify(
+      base({
+        params: { blockedUsers: true, unusedDays: 90, sshNoExpiry: true },
+        keysByUser: keys(3, { last_used_at: daysAgo(200) }),
+        pats: [pat(1, 2)],
+      }),
+    );
+    expect(r.items.filter((i) => i.kind === 'SSH_KEY')[0]!.reasons).toEqual(['USER_BLOCKED', 'UNUSED', 'NO_EXPIRY']);
+    expect(r.items.filter((i) => i.kind === 'PAT')).toEqual([]); // PAT sem uso há muito? este é recente: nada
+  });
+  it('sem a opção, chave sem validade e em uso não entra; bots e a própria conta seguem as regras de sempre', () => {
+    expect(classify(base({ params: { blockedUsers: false }, keysByUser: keys(2, { last_used_at: daysAgo(1) }) })).items).toEqual([]);
+    expect(classify(base({ params: only, keysByUser: keys(6, {}) })).items).toEqual([]); // bot
+    const self = classify(base({ params: only, keysByUser: keys(1, {}) })).items;
+    expect(self).toHaveLength(1);
+    expect(self[0]!.protectedReason).toBe('SELF');
+  });
+});
+
 describe('validateCleanupParams', () => {
   const ok: CleanupParams = { blockedUsers: true, unusedDays: 90, includePat: true, includeSsh: true };
   it('aceita parâmetros válidos', () => expect(validateCleanupParams(ok)).toBeNull());
+  it('só "SSH sem validade" já é um critério', () =>
+    expect(validateCleanupParams({ ...ok, blockedUsers: false, unusedDays: null, sshNoExpiry: true })).toBeNull());
   it.each([
     [{ blockedUsers: false, unusedDays: null }, /critério/],
+    [{ blockedUsers: false, unusedDays: null, sshNoExpiry: true, includeSsh: false }, /exigem incluir chaves SSH/],
     [{ includePat: false, includeSsh: false }, /tipo de credencial/],
     [{ unusedDays: 0 }, /entre 1 e 3650/],
     [{ unusedDays: 3651 }, /entre 1 e 3650/],
@@ -185,5 +232,33 @@ describe('escopos e tipo de uso nos candidatos', () => {
     expect(usageTypeLabel('auth_and_signing')).toBe('autenticação + assinatura');
     expect(usageTypeLabel('novo_tipo')).toBe('novo_tipo');
     expect(usageTypeLabel(null)).toBeNull();
+  });
+});
+
+describe('isBotUser (não revogar o que roda pipelines)', () => {
+  it.each([
+    [{ username: 'x', bot: true }, true],
+    [{ username: 'x', user_type: 'project_bot' }, true],
+    [{ username: 'x', user_type: 'service_account' }, true],
+    [{ username: 'x', user_type: 'human' }, false],
+    [{ username: 'project_123_bot_abc' }, true],
+    [{ username: 'group_9_bot_x' }, true],
+    [{ username: 'projects_bot' }, false], // não é o padrão do GitLab
+    [{ username: 'maria', bot: false, user_type: null }, false],
+    [{ username: 'maria' }, false],
+  ])('%j → %s', (u, expected) => expect(isBotUser(u)).toBe(expected));
+});
+
+describe('classify: dono desconhecido e campos ausentes', () => {
+  it('chave de usuário que não está na lista é ignorada e CONTADA', () => {
+    const r = classify(base({ keysByUser: new Map([[999, [{ id: 1, last_used_at: daysAgo(500) }]]]) }));
+    expect(r.items).toEqual([]);
+    expect(r.excluded.unknownOwner).toBe(1);
+  });
+  it('PAT sem created_at/last_used_at: nunca é "sem uso" (sem data = desconhecido); só entra se o dono está bloqueado', () => {
+    const semDatas = { id: 7, user_id: 2, name: 'sem-datas' }; // usuário ativo
+    expect(classify(base({ pats: [semDatas] })).items).toEqual([]);
+    const bloqueado = classify(base({ pats: [{ id: 8, user_id: 3, name: 'b' }] })).items[0]!;
+    expect(bloqueado).toMatchObject({ createdAt: null, lastUsedAt: null, expiresAt: null, reasons: ['USER_BLOCKED'] });
   });
 });

@@ -44,3 +44,18 @@ export const ctxFor = (user: { id: string; username?: string | null }, headers?:
   actor: { id: user.id, username: user.username ?? null },
   ...(headers && { headers }),
 });
+
+/**
+ * Conta "pronta" (senha trocada + 2FA ativo, como exige REQUIRE_APP_2FA). Faz o login ANTES de ativar o 2FA no banco:
+ * com 2FA ativo o login exigiria o segundo fator e não criaria sessão. Devolve os headers da sessão.
+ */
+export async function readyUser(username: string, role: 'admin' | 'user' = 'user') {
+  const u = await seedUser(username, role, { mustChangePassword: false });
+  const headers = await loginHeaders(username);
+  await prisma.user.update({ where: { id: u.id }, data: { twoFactorEnabled: true } });
+  return { u, headers };
+}
+
+/** Envelhece a sessão (simula "login velho") sem tocar no cookie. */
+export const ageSession = (userId: string, minutes: number) =>
+  prisma.session.updateMany({ where: { userId }, data: { createdAt: new Date(Date.now() - minutes * 60_000) } });

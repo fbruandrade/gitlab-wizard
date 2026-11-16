@@ -10,6 +10,8 @@ import { requireReadySession } from '@/server/auth/guards';
 import { env } from '@/server/env';
 import { listAudit } from '@/server/services/audit.service';
 import { resolveSelectedToken } from '@/server/token-selection';
+import { PageHeader } from '@/components/common/page-header';
+import { WandSparkles } from 'lucide-react';
 
 export default async function Dashboard() {
   const session = await requireReadySession();
@@ -17,7 +19,9 @@ export default async function Dashboard() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <h1 className="text-2xl font-semibold">Olá, {session.user.name}</h1>
+      <PageHeader icon={WandSparkles} tone="violet" title={`Olá, ${session.user.name}`}>
+        Suas chaves, em ordem.
+      </PageHeader>
 
       {!token ? (
         <Card data-testid="no-token-card">
@@ -72,7 +76,7 @@ export default async function Dashboard() {
                   const ok = token.capabilities.includes(c.key);
                   return (
                     <li key={c.key} className="flex gap-2">
-                      {ok ? <Check className="mt-0.5 size-4 text-emerald-600" /> : <X className="mt-0.5 size-4 text-destructive" />}
+                      {ok ? <Check className="mt-0.5 size-4 text-success" /> : <X className="mt-0.5 size-4 text-destructive" />}
                       <div>
                         <span data-testid={`cap-${c.key}`} data-ok={ok}>
                           {c.label}

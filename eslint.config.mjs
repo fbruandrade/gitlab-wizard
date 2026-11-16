@@ -11,5 +11,5 @@ export default defineConfig([
       'react/no-danger': 'error',
     },
   },
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'src/generated/**']),
+  globalIgnores(['coverage/**', '.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'src/generated/**']),
 ]);

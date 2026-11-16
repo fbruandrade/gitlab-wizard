@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ERROR_MESSAGES } from '@/lib/messages';
+import { ERROR_MESSAGES, messageFor } from '@/lib/messages';
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -20,5 +20,12 @@ describe('mensagens de erro', () => {
     expect(codes.size).toBeGreaterThan(15);
     const missing = [...codes].filter((c) => !ERROR_MESSAGES[c]);
     expect(missing).toEqual([]);
+  });
+});
+
+describe('messageFor', () => {
+  it('código conhecido → a mensagem; desconhecido → a genérica (nunca "undefined")', () => {
+    expect(messageFor('FORBIDDEN')).toBe(ERROR_MESSAGES.FORBIDDEN);
+    expect(messageFor('CODIGO_NOVO_SEM_MENSAGEM')).toBe(ERROR_MESSAGES.INTERNAL);
   });
 });

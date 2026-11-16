@@ -1,12 +1,14 @@
 import { SecurityPanels } from '@/components/auth/security-panels';
 import { requireReadySession } from '@/server/auth/guards';
 import { env } from '@/server/env';
+import { PageHeader } from '@/components/common/page-header';
+import { UserRound } from 'lucide-react';
 
 export default async function SecurityPage() {
   const s = await requireReadySession();
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-2xl font-semibold">Minha conta</h1>
+      <PageHeader icon={UserRound} tone="violet" title="Minha conta" />
       <dl className="grid grid-cols-[8rem_1fr] gap-y-1 text-sm" data-testid="account-data">
         <dt className="text-muted-foreground">Nome</dt>
         <dd>{s.user.name}</dd>

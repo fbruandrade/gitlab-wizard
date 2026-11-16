@@ -12,6 +12,8 @@ export interface FakeUser {
   two_factor_enabled: boolean;
   is_admin: boolean;
   bot?: boolean;
+  /** Não aparece na listagem GET /users (mas GET /users/:id funciona): simula dono não listado. */
+  hidden?: boolean;
   last_sign_in_at?: string;
 }
 export interface FakeToken {
@@ -34,7 +36,32 @@ export interface FakeKey {
   created_at: string;
   /** `undefined` = o campo NÃO vem na resposta (como se o GitLab não informasse); null = nunca usada. */
   last_used_at?: string | null;
+  /** Data de validade da chave; ausente/null = sem prazo. */
+  expires_at?: string | null;
   usage_type?: string;
+}
+export interface FakeGroup {
+  id: number;
+  name: string;
+  path: string;
+  full_path: string;
+  parent_id: number | null;
+}
+export interface FakeProject {
+  id: number;
+  name: string;
+  path: string;
+  path_with_namespace: string;
+  groupId: number;
+}
+export interface FakeVariable {
+  groupId: number;
+  key: string;
+  value: string;
+  masked: boolean;
+  protected: boolean;
+  hidden: boolean;
+  environment_scope: string;
 }
 export interface FakeOptions {
   tls?: { key: string; cert: string };
@@ -56,7 +83,27 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
   // Configuração da instância. `ultimate:false` = edição sem o recurso: o PUT responde 200 mas IGNORA o campo.
   const instance = { maxPatLifetime: null as number | null, ultimate: true };
   // Injeção de falhas/atrasos para o próximo request que casar com `match`.
-  const faults: { match: RegExp; status?: number; delayMs?: number; applyThenDelay?: boolean; slowMs?: number; body?: unknown }[] = [];
+  const faults: {
+    match: RegExp;
+    status?: number;
+    delayMs?: number;
+    applyThenDelay?: boolean;
+    slowMs?: number;
+    body?: unknown;
+    rawBody?: string;
+    reset?: boolean;
+    /** Aplica a escrita de variável e derruba a conexão: o cliente não sabe se valeu. */
+    applyThenReset?: boolean;
+    /** Deixa passar as N primeiras requisições que casarem antes de disparar. */
+    skip?: number;
+  }[] = [];
+  const groups = new Map<number, FakeGroup>();
+  const projects = new Map<number, FakeProject>();
+  const variables = new Map<string, FakeVariable>();
+  /** Projetos em que o operador não tem papel (403 ao listar/criar tokens). */
+  const denyProjects = new Set<number>();
+  let nextGroupId = 700;
+  let nextProjectId = 800;
 
   let license: Record<string, unknown> | null = null; // null = sem licença → 404
 
@@ -77,6 +124,44 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
       };
       keys.set(key.id, key);
       return key;
+    },
+    groups,
+    projects,
+    variables,
+    denyProjects,
+    addGroup(path: string, parentId: number | null = null): FakeGroup {
+      const parent = parentId ? groups.get(parentId)! : null;
+      const g: FakeGroup = {
+        id: nextGroupId++,
+        name: path,
+        path,
+        full_path: parent ? `${parent.full_path}/${path}` : path,
+        parent_id: parentId,
+      };
+      groups.set(g.id, g);
+      return g;
+    },
+    addProject(groupId: number, path: string): FakeProject {
+      const g = groups.get(groupId)!;
+      const p: FakeProject = { id: nextProjectId++, name: path, path, path_with_namespace: `${g.full_path}/${path}`, groupId };
+      projects.set(p.id, p);
+      return p;
+    },
+    /** Token de acesso do projeto: vira um token autenticável de um usuário-bot (como no GitLab). */
+    addProjectToken(
+      projectId: number,
+      t: Partial<FakeToken> & { accessLevel?: number } = {},
+    ): FakeToken & { projectId: number; accessLevel: number } {
+      const bot = api.addUser({ username: `project_${projectId}_bot_${nextTokenId}`, bot: true });
+      const { accessLevel, ...rest } = t;
+      const tok = api.addToken(bot.id, { name: 'cofre', scopes: ['read_api'], expires_at: '2027-06-01', ...rest });
+      Object.assign(tok, { projectId, accessLevel: accessLevel ?? 40 });
+      return tok as FakeToken & { projectId: number; accessLevel: number };
+    },
+    setVariable(groupId: number, key: string, value: string, o: Partial<FakeVariable> = {}) {
+      const v: FakeVariable = { groupId, key, value, masked: true, protected: false, hidden: false, environment_scope: '*', ...o };
+      variables.set(`${groupId}:${key}`, v);
+      return v;
     },
     setLicense: (l: Record<string, unknown> | null) => void (license = l),
     addUser(u: Partial<FakeUser> & { username: string }): FakeUser {
@@ -130,8 +215,18 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
     const secret = (req.headers['private-token'] as string | undefined) ?? null;
     requests.push({ method: req.method ?? 'GET', path, token: secret });
 
-    const fi = faults.findIndex((f) => f.match.test(`${req.method} ${path}`));
+    // A primeira falha que casar manda: com `skip`, esta requisição passa e as falhas seguintes continuam na fila.
+    let fi = faults.findIndex((f) => f.match.test(`${req.method} ${path}`));
+    if (fi >= 0 && faults[fi]!.skip) {
+      faults[fi]!.skip!--;
+      fi = -1;
+    }
     const fault = fi >= 0 ? faults.splice(fi, 1)[0] : undefined;
+    if (fault?.reset) return void req.socket.destroy(); // conexão derrubada no meio da requisição
+    if (fault?.rawBody !== undefined) {
+      res.writeHead(fault.status ?? 502, { 'content-type': 'text/html' }); // corpo que NÃO é JSON (ex.: página de erro de um proxy)
+      return void res.end(fault.rawBody);
+    }
     if (fault?.status)
       return json(res, fault.status, fault.body ?? { message: 'injected' }, fault.status === 429 ? { 'retry-after': '0' } : {});
 
@@ -257,12 +352,117 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
       if (!fault.applyThenDelay) return;
     }
 
+    // ── cofre de tokens de projeto: grupos, projetos, tokens de projeto e variáveis de grupo ─────────────────
+    if (path.startsWith('/groups') || path.startsWith('/projects')) {
+      if (!has('api', 'read_api')) return json(res, 403, { message: '403 Forbidden' });
+      const groupView = ({ id, name, path: gp, full_path, parent_id }: FakeGroup) => ({ id, name, path: gp, full_path, parent_id });
+      const projView = ({ id, name, path: pp, path_with_namespace }: FakeProject) => ({ id, name, path: pp, path_with_namespace });
+      const tokView = (t: FakeToken & { accessLevel?: number }) => ({
+        id: t.id,
+        name: t.name,
+        scopes: t.scopes,
+        created_at: t.created_at,
+        last_used_at: t.last_used_at ?? null,
+        expires_at: t.expires_at,
+        active: !t.revoked,
+        revoked: t.revoked,
+        access_level: t.accessLevel ?? 40,
+      });
+      const varView = (v: FakeVariable) => ({
+        key: v.key,
+        value: v.hidden ? null : v.value,
+        masked: v.masked,
+        protected: v.protected,
+        hidden: v.hidden,
+        environment_scope: v.environment_scope,
+        variable_type: 'env_var',
+      });
+      let m: RegExpMatchArray | null;
+
+      if ((m = path.match(/^\/groups\/([^/]+)\/subgroups$/)) && req.method === 'GET') {
+        const p = page([...groups.values()].filter((g) => g.parent_id === Number(m![1])).map(groupView));
+        return json(res, 200, p.slice, p.headers);
+      }
+      if ((m = path.match(/^\/groups\/([^/]+)\/projects$/)) && req.method === 'GET') {
+        const p = page([...projects.values()].filter((pr) => pr.groupId === Number(m![1])).map(projView));
+        return json(res, 200, p.slice, p.headers);
+      }
+      if ((m = path.match(/^\/groups\/(\d+)\/variables(?:\/([^/]+))?$/))) {
+        const gid = Number(m[1]);
+        if (!groups.has(gid)) return json(res, 404, { message: '404 Group Not Found' });
+        const key = m[2] ? decodeURIComponent(m[2]) : null;
+        const cur = key ? variables.get(`${gid}:${key}`) : undefined;
+        if (req.method === 'GET' && key) return cur ? json(res, 200, varView(cur)) : json(res, 404, { message: '404 Variable Not Found' });
+        const body = JSON.parse((await readBody(req)) || '{}') as Partial<FakeVariable>;
+        if (req.method === 'POST' && !key) {
+          if (!body.key || variables.has(`${gid}:${body.key}`)) return json(res, 400, { message: { key: ['has already been taken'] } });
+          if (body.masked && (body.value ?? '').length < 8) return json(res, 400, { message: { value: ['is invalid'] } });
+          const v = api.setVariable(gid, body.key, body.value ?? '', {
+            masked: body.masked ?? false,
+            protected: body.protected ?? false,
+            environment_scope: body.environment_scope ?? '*',
+          });
+          if (fault?.applyThenReset) return void req.socket.destroy();
+          return json(res, 201, varView(v));
+        }
+        if (req.method === 'PUT' && key) {
+          if (!cur) return json(res, 404, { message: '404 Variable Not Found' });
+          if (body.value !== undefined) cur.value = body.value;
+          if (body.masked !== undefined) cur.masked = body.masked;
+          if (body.protected !== undefined) cur.protected = body.protected;
+          if (fault?.applyThenReset) return void req.socket.destroy();
+          return json(res, 200, varView(cur));
+        }
+      }
+      if ((m = path.match(/^\/groups\/([^/]+)$/)) && req.method === 'GET') {
+        const ref = decodeURIComponent(m[1]!);
+        const g = /^\d+$/.test(ref) ? groups.get(Number(ref)) : [...groups.values()].find((x) => x.full_path === ref);
+        return g ? json(res, 200, groupView(g)) : json(res, 404, { message: '404 Group Not Found' });
+      }
+      if ((m = path.match(/^\/projects\/(\d+)\/access_tokens(?:\/(\d+))?$/))) {
+        const pid = Number(m[1]);
+        if (!projects.has(pid)) return json(res, 404, { message: '404 Project Not Found' });
+        if (denyProjects.has(pid)) return json(res, 403, { message: '403 Forbidden' });
+        const mine = () => [...tokens.values()].filter((t) => (t as { projectId?: number }).projectId === pid);
+        if (req.method === 'GET' && !m[2]) {
+          let list = mine();
+          if (url.searchParams.get('state') === 'active') list = list.filter((t) => !t.revoked);
+          const p = page(list.map(tokView));
+          return json(res, 200, p.slice, p.headers);
+        }
+        if (req.method === 'POST' && !m[2]) {
+          const body = JSON.parse((await readBody(req)) || '{}') as {
+            name: string;
+            scopes: string[];
+            access_level: number;
+            expires_at: string;
+          };
+          const t = api.addProjectToken(pid, {
+            name: body.name,
+            scopes: body.scopes,
+            expires_at: body.expires_at,
+            accessLevel: body.access_level,
+          });
+          return json(res, 201, { ...tokView(t), token: t.token });
+        }
+        if (req.method === 'DELETE' && m[2]) {
+          const t = mine().find((x) => x.id === Number(m![2]));
+          if (!t) return json(res, 404, { message: '404 Not Found' });
+          t.revoked = true;
+          res.writeHead(204);
+          return void res.end();
+        }
+      }
+    }
+
     // ── usuários (somente admin) ─────────────────────────────────────────────
     if (path.startsWith('/users')) {
       if (!owner.is_admin || !has('api', 'read_api')) return json(res, 403, { message: '403 Forbidden' });
       if (req.method === 'GET' && path === '/users') {
         const q = (url.searchParams.get('search') ?? '').toLowerCase();
-        let list = [...users.values()].filter((u) => !q || [u.username, u.name, u.email].some((s) => s.toLowerCase().includes(q)));
+        let list = [...users.values()]
+          .filter((u) => !u.hidden)
+          .filter((u) => !q || [u.username, u.name, u.email].some((s) => s.toLowerCase().includes(q)));
         if (url.searchParams.get('blocked') === 'true') list = list.filter((u) => u.state === 'blocked' || u.state === 'ldap_blocked');
         const per = Number(url.searchParams.get('per_page') ?? 20),
           page = Number(url.searchParams.get('page') ?? 1);
@@ -372,6 +572,24 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
           if (t) t.revoked = true;
           return send(200, { ok: Boolean(t) });
         }
+        if (req.method === 'POST' && p === '/groups')
+          return send(200, api.addGroup(String(body.path), (body.parentId as number | null) ?? null));
+        if (req.method === 'POST' && p === '/projects') return send(200, api.addProject(Number(body.groupId), String(body.path)));
+        if (req.method === 'POST' && p === '/project-tokens') {
+          const { projectId, ...rest } = body as { projectId: number } & Partial<FakeToken>;
+          return send(200, api.addProjectToken(Number(projectId), rest));
+        }
+        if (req.method === 'POST' && p === '/variables') {
+          const { groupId, key, value, ...rest } = body as { groupId: number; key: string; value: string } & Partial<FakeVariable>;
+          return send(200, api.setVariable(Number(groupId), key, value, rest));
+        }
+        if (req.method === 'GET' && p === '/groups-list') return send(200, [...groups.values()]);
+        if (req.method === 'GET' && p === '/variables') return send(200, [...variables.values()]);
+        if (req.method === 'GET' && p === '/project-tokens')
+          return send(
+            200,
+            [...tokens.values()].filter((t) => (t as { projectId?: number }).projectId !== undefined),
+          );
         if (req.method === 'GET' && p === '/requests') return send(200, requests);
         send(404, { message: 'unknown control route' });
       })().catch(() => {

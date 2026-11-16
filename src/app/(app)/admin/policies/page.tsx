@@ -7,6 +7,8 @@ import { getScan } from '@/server/services/cleanup.service';
 import { resolveSelectedToken } from '@/server/token-selection';
 import { getGitLabPatLifetime } from '@/server/services/pat-policy.service';
 import { getSettings } from '@/server/services/settings.service';
+import { PageHeader } from '@/components/common/page-header';
+import { SlidersHorizontal } from 'lucide-react';
 
 export default async function PoliciesPage({ searchParams }: { searchParams: Promise<{ sim?: string }> }) {
   const session = await requireAdminPage();
@@ -29,10 +31,9 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Políticas</h1>
-        <p className="text-sm text-muted-foreground">Prazo máximo de validade do PAT, na ferramenta e no GitLab.</p>
-      </div>
+      <PageHeader icon={SlidersHorizontal} tone="teal" title="Políticas">
+        Prazo máximo de validade do PAT, na ferramenta e no GitLab.
+      </PageHeader>
       {!canAdmin && (
         <Alert data-testid="policies-no-cap">
           <AlertDescription>

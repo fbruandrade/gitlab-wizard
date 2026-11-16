@@ -48,7 +48,7 @@ describe('vincular PAT', () => {
   it('valida no GitLab, calcula capacidades e guarda CIFRADO (sem o token em claro no banco)', async () => {
     const { tok, user } = await linked();
     const row = (await getActiveToken(user.id))!;
-    expect(row.capabilities.sort()).toEqual(['ADMIN_USERS', 'READ_USERS', 'SELF_ROTATE']);
+    expect(row.capabilities.sort()).toEqual(['ADMIN_USERS', 'READ_USERS', 'SELF_ROTATE', 'VAULT_TOKENS']);
     expect(row.gitlabUsername).toBe('root');
     expect(Buffer.from(row.ciphertext!).toString('utf8')).not.toContain(tok.token);
     expect(JSON.stringify(row)).not.toContain(tok.token);
@@ -230,6 +230,27 @@ describe('rotação', () => {
     expect(await code(rotateToken(ctx, inDays(30), false))).toBe('GITLAB_UNAVAILABLE');
     expect(rotatePosts()).toHaveLength(1);
     expect((await prisma.gitLabToken.findFirstOrThrow({ where: { userId: user.id } })).status).toBe('ACTIVE');
+  });
+
+  it('a verificação pós-rotação falha (503): a rotação CONTA como feita e fica registrado verified=false', async () => {
+    const { ctx, user } = await linked();
+    for (let i = 0; i < 3; i++) fake.fault({ match: /GET \/personal_access_tokens\/self/, status: 503 }); // as 3 tentativas da leitura
+    expect((await rotateToken(ctx, inDays(30), false)).status).toBe('ROTATED');
+    const rows = await prisma.gitLabToken.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'asc' } });
+    expect(rows.map((r) => r.status)).toEqual(['ROTATED', 'ACTIVE']); // o novo token foi salvo normalmente
+    const [a] = await prisma.auditLog.findMany({ where: { action: 'GITLAB_TOKEN_ROTATED' } });
+    expect(a).toMatchObject({ result: 'SUCCESS' });
+    expect(a!.metadata).toMatchObject({ verified: false });
+  });
+
+  it('timeout + a consulta de conferência TAMBÉM falha: estado inconclusivo → NÃO mexe no token, audita UNKNOWN', async () => {
+    const { ctx, user } = await linked();
+    fake.fault({ match: /POST .*\/rotate/, delayMs: 2500, applyThenDelay: true });
+    for (let i = 0; i < 3; i++) fake.fault({ match: /GET \/personal_access_tokens\/self/, status: 503 });
+    expect(await code(rotateToken(ctx, inDays(30), false))).toBe('GITLAB_ROTATION_UNKNOWN');
+    expect((await prisma.gitLabToken.findFirstOrThrow({ where: { userId: user.id } })).status).toBe('ACTIVE'); // sem prova, nada muda
+    expect((await prisma.auditLog.findMany({ where: { action: 'GITLAB_TOKEN_ROTATED' } })).map((a) => a.result)).toEqual(['UNKNOWN']);
+    expect(fake.requests.filter((r) => r.path.endsWith('/rotate'))).toHaveLength(1);
   });
 
   it('401 na rotação → PAT REVOKED', async () => {

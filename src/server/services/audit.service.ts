@@ -11,7 +11,7 @@ export interface Actor {
   username?: string | null;
 }
 export interface AuditTarget {
-  type: 'gitlab_user' | 'tool_user' | 'gitlab_token';
+  type: 'gitlab_user' | 'tool_user' | 'gitlab_token' | 'gitlab_project';
   id?: string | number | null;
   label?: string | null;
 }

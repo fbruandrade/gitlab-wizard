@@ -10,7 +10,9 @@ import { auth, type Session } from './auth';
 
 const MIN = 60_000;
 
-export const getSession = cache(async (): Promise<Session | null> => auth.api.getSession({ headers: await headers() }));
+/** Memoizada pelo objeto de headers da requisição (dedupe dentro da requisição; sem estado global entre requisições). */
+const sessionFor = cache(async (h: Headers): Promise<Session | null> => auth.api.getSession({ headers: h }));
+export const getSession = async (): Promise<Session | null> => sessionFor(await headers());
 
 /** Leitura sem cookie cache: reflete revogações/banimentos na hora. Usada em ações sensíveis. */
 async function getSessionNoCache(): Promise<Session | null> {

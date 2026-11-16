@@ -31,6 +31,14 @@ export const ACTION_LABELS: Record<string, string> = {
   GITLAB_CLEANUP_EXECUTED: 'Limpeza de credenciais executada',
   GITLAB_CLEANUP_PAT_REVOKED: 'Token de usuário revogado',
   GITLAB_CLEANUP_SSH_KEY_DELETED: 'Chave SSH de usuário removida',
+  VAULT_AUTO_ENABLED: 'Rotação automática dos cofres habilitada',
+  VAULT_AUTO_DISABLED: 'Rotação automática dos cofres desabilitada',
+  VAULT_AUTO_RUN: 'Rotação automática dos cofres: execução',
+  VAULT_SCANNED: 'Varredura dos cofres de token',
+  VAULT_EXECUTED: 'Cofres de token: execução',
+  VAULT_TOKEN_CREATED: 'Token de cofre criado',
+  VAULT_TOKEN_ROTATED: 'Token de cofre rotacionado',
+  VAULT_VARIABLE_WRITTEN: 'Variável do grupo gravada',
   GITLAB_POLICY_PAT_LIFETIME_SIMULATED: 'Simulação do prazo máximo do PAT',
   GITLAB_POLICY_PAT_LIFETIME_APPLIED: 'Prazo máximo do PAT aplicado no GitLab',
 };
@@ -40,6 +48,7 @@ export const ACTION_GROUPS = [
   { value: 'GITLAB_TOKEN_', label: 'Token GitLab' },
   { value: 'GITLAB_USER_', label: 'Usuários GitLab' },
   { value: 'GITLAB_CLEANUP_', label: 'Limpeza de credenciais' },
+  { value: 'VAULT_', label: 'Cofres de token' },
   { value: 'GITLAB_POLICY_', label: 'Políticas do GitLab' },
   { value: 'SETTINGS_', label: 'Configurações' },
 ] as const;

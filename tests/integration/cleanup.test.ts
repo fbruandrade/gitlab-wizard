@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '@/server/db';
 import type { CleanupItem, CleanupParams } from '@/lib/cleanup-rules';
-import { executeCleanup, getScan, startCleanupScan } from '@/server/services/cleanup.service';
+import { executeCleanup, getScan, recentScans, startCleanupScan } from '@/server/services/cleanup.service';
 import { addToken } from '@/server/services/gitlab-token.service';
 import { ctxFor, resetDb, seedUser, startGitLab } from '../support/app';
 import type { FakeGitLab } from '../support/fake-gitlab';
@@ -77,6 +77,52 @@ async function scan(ctx: ReturnType<typeof ctxFor>, params: CleanupParams = BOTH
   return { scanId, row, items: (row.items ?? []) as unknown as CleanupItem[], summary: row.summary as Record<string, unknown> };
 }
 const keysOf = (items: CleanupItem[]) => items.map((i) => i.key).sort();
+
+describe('chaves SSH sem prazo de validade', () => {
+  const NOEXP: CleanupParams = { blockedUsers: false, unusedDays: null, includePat: false, includeSsh: true, sshNoExpiry: true };
+
+  it('lista todas as chaves sem expires_at (inclusive as sem dado de último uso), ignora as com validade e não toca em tokens', async () => {
+    const w = await world();
+    const comValidade = fake.addKey(w.ids.fresh.id, { last_used_at: daysAgo(1), expires_at: '2030-01-01' });
+    const { items, summary } = await scan(w.ctx, NOEXP);
+    const keys = keysOf(items.filter((i) => !i.protectedReason));
+    expect(keys).toEqual(
+      [w.k.blocked, w.k.idle, w.k.fresh, w.k.neverUsed, w.k.noField].map((k) => `SSH_KEY:${k.id}`).sort(), // bot e chave com validade ficam de fora
+    );
+    expect(keys).not.toContain(`SSH_KEY:${comValidade.id}`);
+    expect(items.every((i) => i.kind === 'SSH_KEY' && i.reasons.join() === 'NO_EXPIRY')).toBe(true);
+    expect(summary).toMatchObject({ noExpiry: 5, pat: 0 });
+    expect(fake.requests.filter((r) => r.method === 'DELETE')).toEqual([]); // dry-run
+  });
+
+  it('revoga as selecionadas (auditado com o motivo NO_EXPIRY) e preserva as demais', async () => {
+    const w = await world();
+    const { scanId } = await scan(w.ctx, NOEXP);
+    const r = await executeCleanup(w.ctx, { scanId, keys: [`SSH_KEY:${w.k.noField.id}`, `SSH_KEY:${w.k.fresh.id}`], reason: why });
+    expect(r.revoked).toBe(2);
+    expect(fake.keys.has(w.k.noField.id)).toBe(false);
+    expect(fake.keys.has(w.k.fresh.id)).toBe(false);
+    expect(fake.keys.has(w.k.idle.id)).toBe(true);
+    const a = await prisma.auditLog.findMany({ where: { action: 'GITLAB_CLEANUP_SSH_KEY_DELETED', result: 'SUCCESS' } });
+    expect(a).toHaveLength(2);
+    expect((a[0]!.metadata as { reasons: string[] }).reasons).toEqual(['NO_EXPIRY']);
+  });
+
+  it('se a chave ganhou validade entre a varredura e a execução, é ignorada (CHANGED)', async () => {
+    const w = await world();
+    const { scanId } = await scan(w.ctx, NOEXP);
+    fake.keys.get(w.k.noField.id)!.expires_at = '2030-01-01';
+    const r = await executeCleanup(w.ctx, { scanId, keys: [`SSH_KEY:${w.k.noField.id}`], reason: why });
+    expect(r).toMatchObject({ revoked: 0, skipped: 1 });
+    expect(r.results[0]!.code).toBe('CHANGED');
+    expect(fake.keys.has(w.k.noField.id)).toBe(true);
+  });
+
+  it('exige chaves SSH incluídas', async () => {
+    const w = await world();
+    expect(await code(startCleanupScan(w.ctx, { ...NOEXP, includeSsh: false, includePat: true }))).toBe('NO_CRITERIA');
+  });
+});
 
 describe('varredura (dry-run)', () => {
   it('encontra o que deve, ignora o que não deve, e NÃO altera nada no GitLab', async () => {
@@ -177,6 +223,50 @@ describe('varredura (dry-run)', () => {
     });
     await prisma.$executeRaw`UPDATE admin_scan SET updated_at = now() - interval '10 minutes' WHERE id = ${stale.id}::uuid`;
     expect((await getScan(stale.id, w.ctx.actor.id))?.status).toBe('FAILED');
+  });
+});
+
+describe('varredura: donos de token fora da listagem', () => {
+  it('dono que o GET /users NÃO lista é resolvido por GET /users/:id (e entra pelo critério de bloqueio)', async () => {
+    const w = await world();
+    const oculto = fake.addUser({ username: 'oculto', state: 'blocked', hidden: true }); // não aparece em /users nem em /users?blocked=true
+    const tok = fake.addToken(oculto.id, { name: 'tok-oculto', last_used_at: daysAgo(1) });
+    const { items } = await scan(w.ctx, { ...BOTH, unusedDays: null, includeSsh: false });
+    expect(items.find((i) => i.key === `PAT:${tok.id}`)).toMatchObject({ username: 'oculto', reasons: ['USER_BLOCKED'] });
+  });
+
+  it('dono que NÃO EXISTE mais (token órfão) não derruba a varredura: é ignorado e contado', async () => {
+    const w = await world();
+    fake.addToken(424242, { name: 'orfao', last_used_at: daysAgo(500) }); // nenhum usuário com esse id
+    const { row, summary } = await scan(w.ctx);
+    expect(row.status).toBe('DONE');
+    expect((summary.excluded as { unknownOwner: number }).unknownOwner).toBe(1);
+  });
+
+  it('um erro do GitLab ao resolver o dono (≠ 404) faz a varredura FALHAR em vez de seguir com dados incompletos', async () => {
+    const w = await world();
+    fake.addUser({ username: 'oculto', state: 'blocked', hidden: true });
+    const u = [...fake.users.values()].find((x) => x.username === 'oculto')!;
+    fake.addToken(u.id, { name: 'tok', last_used_at: daysAgo(1) });
+    fake.fault({ match: new RegExp(`GET /users/${u.id}$`), status: 403 });
+    const { row } = await scan(w.ctx);
+    expect(row).toMatchObject({ status: 'FAILED', error: 'GITLAB_FORBIDDEN' });
+  });
+});
+
+describe('varreduras recentes', () => {
+  it('lista as 5 últimas do admin, por tipo, da mais nova para a mais antiga; sem expor os itens', async () => {
+    const w = await world();
+    for (let i = 0; i < 7; i++) await scan(w.ctx, { ...BOTH, blockedUsers: false, unusedDays: 30 + i });
+    await prisma.adminScan.create({
+      data: { id: crypto.randomUUID(), kind: 'PAT_LIFETIME', actorUserId: w.ctx.actor.id, params: { days: 90 } },
+    });
+    const list = await recentScans(w.ctx.actor.id, 'CLEANUP');
+    expect(list).toHaveLength(5);
+    expect(list.map((r) => (r.params as { unusedDays: number }).unusedDays)).toEqual([36, 35, 34, 33, 32]);
+    expect(Object.keys(list[0]!)).toEqual(['id', 'status', 'createdAt', 'summary', 'params']); // sem `items`
+    expect(await recentScans('outra-conta', 'CLEANUP')).toEqual([]);
+    expect(await recentScans(w.ctx.actor.id, 'PAT_LIFETIME')).toHaveLength(1);
   });
 });
 

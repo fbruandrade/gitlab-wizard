@@ -60,6 +60,7 @@ const env = {
   TOKEN_ENCRYPTION_KEYS: `v1:${randomBytes(32).toString('base64')}`,
   TOKEN_ENCRYPTION_ACTIVE_KEY: 'v1',
   MAINTENANCE_SECRET: randomBytes(24).toString('hex'),
+  VAULT_AUTO_INTERVAL_MINUTES: '0', // o teste dispara a passada pelo gatilho externo
   PORT: String(APP_PORT),
 };
 

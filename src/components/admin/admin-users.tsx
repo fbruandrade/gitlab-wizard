@@ -127,7 +127,7 @@ export function AdminUsers({ rows, currentUserId }: { rows: ToolUserRow[]; curre
               </TableCell>
               <TableCell>{u.twoFactorEnabled ? '✔' : '✖'}</TableCell>
               <TableCell>{u.gitlabUsername ? `@${u.gitlabUsername}` : '—'}</TableCell>
-              <TableCell>{u.banned ? <Badge variant="destructive">Banida</Badge> : 'Ativa'}</TableCell>
+              <TableCell>{u.banned ? <Badge variant="destructive">Banida</Badge> : <Badge variant="success">Ativa</Badge>}</TableCell>
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger
