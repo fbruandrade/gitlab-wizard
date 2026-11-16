@@ -78,7 +78,7 @@ export default async function RunnersPage({ searchParams }: { searchParams: Prom
                   paused: r.paused,
                   status: r.status ?? null,
                   type: r.runner_type ?? null,
-                  tags: r.tag_list ?? [],
+                  tags: r.tag_list,
                 }))}
               />
             )}

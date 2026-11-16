@@ -1,6 +1,6 @@
 # 09 — Estratégia de testes
 
-Tudo abaixo **existe e passa**: `npm test` (228), `npm run test:integration` (299), `npm run test:e2e` (63) e `npm run test:coverage` (unit + integração: 526 testes, com limites de cobertura). Total: **590 testes**. Os testes de integração e E2E precisam de Docker (Testcontainers).
+Tudo abaixo **existe e passa**: `npm test` (228), `npm run test:integration` (302), `npm run test:e2e` (63) e `npm run test:coverage` (unit + integração: 530 testes, com limites de cobertura). Total: **593 testes**. Os testes de integração e E2E precisam de Docker (Testcontainers).
 
 ## 1. Pirâmide
 
@@ -64,7 +64,7 @@ npm run test:coverage      # unitários + integração num só processo; falha s
 open coverage/index.html   # relatório navegável (linha a linha); também coverage/lcov.info e cobertura-coverage.xml
 ```
 
-**Resultado atual (526 testes): 96,9% statements · 90,7% branches · 95,2% funções · 98,3% linhas.** Início da medição: 80,9 / 71,9 / 81,1 / 83,3.
+**Resultado atual (530 testes): 96,9% statements · 90,7% branches · 95,2% funções · 98,3% linhas.** Início da medição: 80,9 / 71,9 / 81,1 / 83,3.
 
 **Por que combinado:** cada suíte cobre partes diferentes (os unitários só enxergam ~21% sozinhos; a lógica de servidor é exercida pela integração com Postgres real). Medir separado subestimaria as duas, então o `vitest.coverage.config.mts` usa os dois *projects* do Vitest e **mescla** a cobertura (provider `v8`, sem instrumentação de código).
 
@@ -95,3 +95,4 @@ open coverage/index.html   # relatório navegável (linha a linha); também cove
 - **Limpeza: chaves SSH sem validade** (`cleanup-rules`, `cleanup.test.ts` e E2E): lista todas as chaves sem `expires_at` (inclusive as sem dado de último uso), ignora as com validade, combina com os outros critérios, revoga auditando o motivo `NO_EXPIRY` e ignora a que ganhou validade depois da varredura.
 - **Runners** (`runner.test.ts`, 10 testes + ações + `runner-rules.test.ts` + E2E): global só por admin (recusado antes de chamar o GitLab), de grupo e de projeto por Owner, `api` sem `create_runner` não cria, 403/404/500 do GitLab (escrita sem retry), busca de alvos, listagem por escopo, pausar/retomar, remover só dentro do escopo, auditoria **sem o token**; E2E: criar global e de grupo (comando de registro com o token), listar, pausar e remover, token ausente da tela e da auditoria, axe com a tabela.
 - Correção encontrada pelo E2E: o seletor de token tinha nome acessível diferente do texto visível (axe `label-content-name-mismatch`).
+- **Tags na listagem de runners:** o fake agora se comporta como o GitLab real (as listas não trazem `tag_list`, só o detalhe), o que expôs o defeito; testes: tags vindas do detalhe, detalhe com falha (runner sem tags conhecidas, os demais seguem) e 401 propagado; E2E confere as tags na tabela.

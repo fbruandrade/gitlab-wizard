@@ -19,7 +19,8 @@ export interface RunnerRow {
   paused: boolean;
   status: string | null;
   type: string | null;
-  tags: string[];
+  /** undefined = o GitLab não devolveu as tags deste runner (falha ao buscar o detalhe). */
+  tags?: string[];
 }
 type Scope = { type: 'instance_type' } | { type: Exclude<RunnerType, 'instance_type'>; id: number };
 
@@ -94,17 +95,21 @@ export function RunnerList({ runners, scope }: { runners: RunnerRow[]; scope: Sc
                   {r.paused && <Badge variant="warning">pausado</Badge>}
                 </TableCell>
                 <TableCell>
-                  <span className="flex max-w-56 flex-wrap gap-1">
-                    {r.tags.length ? (
-                      r.tags.map((t) => (
+                  {r.tags === undefined ? (
+                    <span className="text-muted-foreground" title="O GitLab não devolveu as tags deste runner.">
+                      indisponível
+                    </span>
+                  ) : r.tags.length === 0 ? (
+                    <span className="text-muted-foreground">sem tags</span>
+                  ) : (
+                    <span className="flex max-w-56 flex-wrap gap-1" data-testid={`runner-tags-${r.id}`}>
+                      {r.tags.map((t) => (
                         <Badge key={t} variant="secondary">
                           {t}
                         </Badge>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </span>
+                      ))}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="space-x-2 text-right">
                   <Button variant="outline" size="sm" onClick={() => void toggle(r)} data-testid={`runner-pause-${r.id}`}>

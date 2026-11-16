@@ -3,6 +3,8 @@ import type { Prisma } from '@/generated/prisma/client';
 import type { CreateRunnerInput } from '@/lib/runner-rules';
 import { ActionError } from '@/server/action-result';
 import { env } from '@/server/env';
+import { GitLabApiError } from '@/server/gitlab/errors';
+import { pool } from '@/server/pool';
 import { withAudit } from './audit.service';
 import { withGitLab, type Ctx } from './gitlab-token.service';
 
@@ -22,7 +24,25 @@ export const searchRunnerTargets = (ctx: Ctx, kind: 'group' | 'project', q: stri
     (await c.searchRunnerTargets(kind, q)).map((t) => ({ id: t.id, name: t.name, path: t.full_path ?? t.path_with_namespace ?? t.name })),
   );
 
-export const listRunners = (ctx: Ctx, scope: RunnerScope) => withGitLab(ctx, 'RUNNERS_MANAGE', (c) => c.listRunners(scope));
+/**
+ * Runners do escopo COM as tags. As listas do GitLab (`/runners/all`, `/groups/:id/runners`, `/projects/:id/runners`) não
+ * trazem `tag_list`; ela só existe no detalhe (`GET /runners/:id`), então buscamos cada um (4 em paralelo). Se o detalhe
+ * de algum falhar, ele aparece sem tags (`tag_list` ausente = desconhecido) em vez de derrubar a lista.
+ */
+export const listRunners = (ctx: Ctx, scope: RunnerScope) =>
+  withGitLab(ctx, 'RUNNERS_MANAGE', async (c) => {
+    const list = await c.listRunners(scope);
+    await pool(list, 4, async (r) => {
+      try {
+        r.tag_list = (await c.getRunner(r.id)).tag_list ?? [];
+      } catch (e) {
+        // 401 invalida o token do operador: precisa subir. O resto (404 de um runner removido agora, 5xx) só deixa sem tags.
+        if (e instanceof GitLabApiError && e.code === 'GITLAB_TOKEN_INVALID') throw e;
+        delete r.tag_list;
+      }
+    });
+    return list;
+  });
 
 /**
  * Cria o runner no GitLab e devolve o token de autenticação UMA vez (nunca é gravado nem auditado). A auditoria guarda o

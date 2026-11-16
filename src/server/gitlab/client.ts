@@ -262,6 +262,10 @@ export class GitLabClient {
     });
     return this.parse(json, createdRunnerSchema);
   }
+  /** Detalhe do runner: só aqui vem `tag_list` (as listas do GitLab não trazem as tags). */
+  getRunner(id: number): Promise<GitLabRunner> {
+    return this.get(`/runners/${id}`, runnerSchema);
+  }
   async setRunnerPaused(id: number, paused: boolean): Promise<void> {
     await this.request('PUT', `/runners/${id}`, { body: { paused } });
   }

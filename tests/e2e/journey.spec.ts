@@ -1175,6 +1175,9 @@ test.describe('runners', () => {
     await admin.page.getByTestId('rs-list').click();
     const table = admin.page.getByTestId('runners-table');
     await expect(table).toContainText('runner e2e compartilhado', { timeout: 15_000 });
+    // as tags aparecem na lista (o GitLab só as devolve no detalhe de cada runner)
+    await expect(admin.page.getByTestId(`runner-tags-${runners[0]!.id}`)).toContainText('e2e');
+    await expect(admin.page.getByTestId(`runner-tags-${runners[0]!.id}`)).toContainText('docker');
     const axe = await new AxeBuilder({ page: admin.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
 

@@ -4,7 +4,7 @@
 
 ## O que a ferramenta faz
 1. **Cria** o runner no GitLab (`POST /user/runners`, o fluxo atual com token de autenticação `glrt-…`) e mostra **uma única vez**, nesta ordem: (1) o **token** do runner; (2) o comando de registro para uma **máquina com gitlab-runner** (`gitlab-runner register --non-interactive --url <GitLab> --token glrt-… --executor docker --docker-image alpine:latest`, ou `shell`); (3) os comandos para **Kubernetes com Helm**: `helm repo add gitlab https://charts.gitlab.io && helm repo update` e `helm upgrade --install gitlab-runner gitlab/gitlab-runner --namespace gitlab-runner --create-namespace --set gitlabUrl=<GitLab> --set runnerToken=glrt-… --set rbac.create=true` (idempotente; ajuste namespace/release; para GitLab com certificado interno, use `certsSecretName` do chart). Cada bloco tem botão Copiar.
-2. **Lista** os runners de um escopo (global, grupo ou projeto), com estado (online, offline, sem contato, nunca conectou), pausa e tags.
+2. **Lista** os runners de um escopo (as listas do GitLab **não trazem as tags**: a ferramenta busca o detalhe de cada runner, 4 em paralelo; se o detalhe de algum falhar, ele aparece com "indisponível" nas tags em vez de derrubar a lista) (global, grupo ou projeto), com estado (online, offline, sem contato, nunca conectou), pausa e tags.
 3. **Pausa/retoma** e **remove** (motivo + digitar `REMOVER`).
 
 A ferramenta **não instala** o `gitlab-runner` nem sobe a máquina/contêiner: ela cria a entidade no GitLab e entrega o token. O registro é feito por quem opera o host.

@@ -120,6 +120,39 @@ describe('criar runner', () => {
   });
 });
 
+describe('tags na listagem (o GitLab não as devolve nas listas, só no detalhe)', () => {
+  it('a listagem traz as tags de cada runner, buscadas no detalhe', async () => {
+    const w = await world();
+    const scope = { type: 'group_type' as const, id: w.grupo.id };
+    const a = await createRunner(w.ownerCtx, input({ target: scope, tags: ['linux', 'gpu'] }));
+    const b = await createRunner(w.ownerCtx, input({ target: scope, tags: [], runUntagged: true }));
+    fake.requests.length = 0;
+    const list = await listRunners(w.ownerCtx, scope);
+    expect(Object.fromEntries(list.map((r) => [r.id, r.tag_list]))).toEqual({ [a.runnerId]: ['linux', 'gpu'], [b.runnerId]: [] });
+    // lista paginada + 1 detalhe por runner
+    expect(fake.requests.filter((r) => /^\/runners\/\d+$/.test(r.path)).length).toBe(2);
+  });
+
+  it('falha ao buscar o detalhe de um runner: ele aparece sem tags (desconhecido) e os outros seguem', async () => {
+    const w = await world();
+    const scope = { type: 'group_type' as const, id: w.grupo.id };
+    const a = await createRunner(w.ownerCtx, input({ target: scope, tags: ['a'] }));
+    const b = await createRunner(w.ownerCtx, input({ target: scope, tags: ['b'] }));
+    for (let i = 0; i < 3; i++) fake.fault({ match: new RegExp(`^GET /runners/${a.runnerId}$`), status: 500 }); // GET tem 3 tentativas
+    const list = await listRunners(w.ownerCtx, scope);
+    expect(list.find((r) => r.id === a.runnerId)!.tag_list).toBeUndefined();
+    expect(list.find((r) => r.id === b.runnerId)!.tag_list).toEqual(['b']);
+  });
+
+  it('token do operador inválido durante o detalhe: o erro sobe (não é engolido)', async () => {
+    const w = await world();
+    const scope = { type: 'group_type' as const, id: w.grupo.id };
+    const a = await createRunner(w.ownerCtx, input({ target: scope }));
+    fake.fault({ match: new RegExp(`^GET /runners/${a.runnerId}$`), status: 401 });
+    expect(await code(listRunners(w.ownerCtx, scope))).toBe('GITLAB_TOKEN_INVALID');
+  });
+});
+
 describe('buscar alvos, listar, pausar e remover', () => {
   it('busca grupos/projetos por texto e devolve o caminho completo', async () => {
     const w = await world();

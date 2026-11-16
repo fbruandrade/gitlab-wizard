@@ -410,7 +410,13 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
       online: r.status === 'online',
       runner_type: r.runner_type,
       is_shared: r.runner_type === 'instance_type',
+    });
+    /** Detalhe (GET /runners/:id): só aqui vêm as tags, como no GitLab real. */
+    const runnerDetail = (r: FakeRunner) => ({
+      ...runnerView(r),
       tag_list: r.tag_list,
+      access_level: r.access_level,
+      maximum_timeout: r.maximum_timeout,
     });
     if (path === '/runners/all' && req.method === 'GET') {
       if (!owner.is_admin || !has('api', 'manage_runner')) return json(res, 403, { message: '403 Forbidden' });
@@ -420,6 +426,11 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
     }
     {
       const rm = path.match(/^\/runners\/(\d+)$/);
+      if (rm && req.method === 'GET') {
+        if (!has('api', 'manage_runner')) return json(res, 403, { message: '403 Forbidden' });
+        const r = runners.get(Number(rm[1]));
+        return r ? json(res, 200, runnerDetail(r)) : json(res, 404, { message: '404 Runner Not Found' });
+      }
       if (rm && (req.method === 'PUT' || req.method === 'DELETE')) {
         if (!has('api', 'manage_runner')) return json(res, 403, { message: '403 Forbidden' });
         const r = runners.get(Number(rm[1]));
