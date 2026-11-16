@@ -1110,6 +1110,91 @@ test.describe('cofres de token: rotação automática', () => {
   });
 });
 
+test.describe('runners', () => {
+  test('criar global e de grupo (token mostrado uma vez), listar, pausar e remover', async () => {
+    const rootId = (await control.get<{ id: number }>('/users?username=root')).id;
+    const tok = await control.post<{ token: string }>('/tokens', {
+      userId: rootId,
+      name: 'runners',
+      scopes: ['api', 'create_runner', 'manage_runner'],
+    });
+    await admin.page.goto('/token');
+    await admin.page.getByLabel('Personal Access Token do GitLab').fill(tok.token);
+    await admin.page.getByRole('checkbox', { name: /Definir este como o token padrão/ }).click();
+    await admin.page.getByTestId('add-token').click();
+    await expect(admin.page.getByTestId('token-card')).toHaveCount(2);
+
+    await admin.page.goto('/');
+    await admin.page.getByRole('link', { name: 'Runners' }).click();
+    await expect(admin.page.getByRole('heading', { name: 'Runners' })).toBeVisible();
+
+    // global (padrão para admin): sem tag e sem "jobs sem tag" o botão fica desabilitado até haver motivo
+    await admin.page.getByTestId('rc-desc').fill('runner e2e compartilhado');
+    await admin.page.getByTestId('rc-tags').fill('e2e, docker');
+    await expect(admin.page.getByTestId('rc-submit')).toBeDisabled();
+    await admin.page.getByTestId('rc-reason').fill('CHG0900 - runner compartilhado de teste');
+    await admin.page.getByTestId('rc-submit').click();
+    // 1º bloco: o token; depois o comando da máquina e os comandos do Kubernetes (Helm)
+    const tokenBlock = admin.page.getByTestId('runner-token');
+    await expect(tokenBlock).toContainText('glrt-');
+    const shownToken = (await tokenBlock.textContent())!.trim();
+    await expect(admin.page.getByTestId('runner-cmd-register')).toContainText('gitlab-runner register');
+    await expect(admin.page.getByTestId('runner-cmd-register')).toContainText(shownToken);
+    await expect(admin.page.getByTestId('runner-cmd-helm-repo')).toContainText('helm repo add gitlab https://charts.gitlab.io');
+    await expect(admin.page.getByTestId('runner-cmd-helm')).toContainText('helm upgrade --install gitlab-runner gitlab/gitlab-runner');
+    await expect(admin.page.getByTestId('runner-cmd-helm')).toContainText(`--set runnerToken=${shownToken}`);
+    const blocks = await admin.page
+      .getByTestId('runner-created')
+      .locator('pre')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    expect(blocks[0]).toBe('runner-token');
+    const runners = await control.get<{ id: number; token: string; tag_list: string[]; runner_type: string }[]>('/runners-list');
+    expect(runners).toHaveLength(1);
+    expect(runners[0]).toMatchObject({ runner_type: 'instance_type', tag_list: ['e2e', 'docker'] });
+    expect(shownToken).toBe(runners[0]!.token);
+    await admin.page.getByTestId('runner-created-close').click();
+    // o token nunca fica na tela depois de fechar nem na auditoria
+    await expect(admin.page.locator('body')).not.toContainText(runners[0]!.token);
+    expect(JSON.stringify(await sql("SELECT metadata FROM audit_log WHERE action LIKE 'RUNNER_%'"))).not.toContain(runners[0]!.token);
+
+    // de grupo: buscar o grupo entre os que sou Owner
+    await control.post('/groups', { path: 'time-e2e' });
+    await admin.page.getByTestId('rc-type-group_type').check();
+    await admin.page.getByTestId('rc-q').fill('time-e2e');
+    await admin.page.getByTestId('rc-search').click();
+    await admin.page.getByTestId('rc-results').getByRole('button', { name: 'time-e2e' }).click();
+    await admin.page.getByTestId('rc-untagged').check();
+    await admin.page.getByTestId('rc-reason').fill('CHG0901 - runner do grupo time-e2e');
+    await admin.page.getByTestId('rc-submit').click();
+    await expect(admin.page.getByTestId('runner-cmd-register')).toContainText('--executor docker');
+    await admin.page.getByTestId('runner-created-close').click();
+    expect((await control.get<unknown[]>('/runners-list')).length).toBe(2);
+
+    // listar o escopo global, pausar e remover
+    await admin.page.getByTestId('rs-type-instance_type').check();
+    await admin.page.getByTestId('rs-list').click();
+    const table = admin.page.getByTestId('runners-table');
+    await expect(table).toContainText('runner e2e compartilhado', { timeout: 15_000 });
+    const axe = await new AxeBuilder({ page: admin.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    expect(axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+
+    await admin.page.getByTestId(`runner-pause-${runners[0]!.id}`).click();
+    await expect(table.getByText('pausado')).toBeVisible();
+    expect((await control.get<{ id: number; paused: boolean }[]>('/runners-list')).find((r) => r.id === runners[0]!.id)!.paused).toBe(true);
+
+    await admin.page.getByTestId(`runner-delete-${runners[0]!.id}`).click();
+    const confirm = admin.page.getByTestId('runner-delete-confirm');
+    const dialog = admin.page.getByTestId('runner-delete-dialog');
+    await dialog.getByLabel('Motivo / nº do chamado *').fill('CHG0902 - runner de teste removido');
+    await dialog.getByLabel(/Digite REMOVER/).fill('remover');
+    await expect(confirm).toBeDisabled();
+    await dialog.getByLabel(/Digite REMOVER/).fill('REMOVER');
+    await confirm.click();
+    await expect(admin.page.getByTestId('runners-empty')).toBeVisible({ timeout: 15_000 });
+    expect((await control.get<unknown[]>('/runners-list')).length).toBe(1);
+  });
+});
+
 test('nenhum erro de console, de página ou violação de CSP durante todo o roteiro', () => {
   expect(problems).toEqual([]);
 });

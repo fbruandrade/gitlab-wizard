@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as adminUsers from '@/app/(app)/admin/users/actions';
 import * as cleanup from '@/app/(app)/admin/cleanup/actions';
 import * as vault from '@/app/(app)/admin/vault/actions';
+import * as runners from '@/app/(app)/runners/actions';
 import * as policies from '@/app/(app)/admin/policies/actions';
 import * as gitlabUsers from '@/app/(app)/gitlab/users/actions';
 import * as tokens from '@/app/(app)/token/actions';
@@ -317,5 +318,52 @@ describe('ações do COFRE DE TOKENS', () => {
     const out = ok<{ done: number }>(await vault.executeVaultAction({ scanId, keys: [key], reason: why, confirm: 'APLICAR' }));
     expect(out.done).toBe(1);
     expect(fake.variables.get(`${[...fake.groups.values()].find((g) => g.path === 'app-x')!.id}:PID_HML`)!.value).toBe(String(project.id));
+  });
+});
+
+describe('ações de RUNNERS', () => {
+  it('valida no servidor, exige sessão fresca e devolve o token do runner uma vez', async () => {
+    const root = fake.addUser({ username: 'root', is_admin: true });
+    const { u, headers } = await readyUser('boss', 'admin');
+    await addToken(ctxFor(u), fake.addToken(root.id, { name: 'run', scopes: ['api', 'create_runner'] }).token);
+    const grupo = fake.addGroup('time-z');
+    asRequest(headers);
+
+    const base = {
+      target: { type: 'instance_type' },
+      tags: ['docker'],
+      runUntagged: false,
+      locked: false,
+      protectedRefs: false,
+      paused: false,
+      maximumTimeout: null,
+      reason: why,
+    };
+    expect(fail(await runners.createRunnerAction({ ...base, tags: [] })).code).toBe('VALIDATION'); // sem tag e sem jobs sem tag
+    expect(fail(await runners.createRunnerAction({ ...base, reason: 'curto' })).code).toBe('VALIDATION');
+    expect(fail(await runners.createRunnerAction({ ...base, locked: true })).code).toBe('VALIDATION');
+    expect(fake.runners.size).toBe(0);
+
+    const out = ok<{ runnerId: number; token: string }>(await runners.createRunnerAction(base));
+    expect(out.token).toMatch(/^glrt-/);
+    expect(nextState.revalidated).toContain('/runners');
+    const found = ok<{ id: number; path: string }[]>(await runners.searchRunnerTargetsAction({ kind: 'group', q: 'time-z' }));
+    expect(found).toEqual([{ id: grupo.id, name: 'time-z', path: 'time-z' }]);
+    expect(fail(await runners.searchRunnerTargetsAction({ kind: 'x', q: '' })).code).toBe('VALIDATION');
+
+    const scope = { type: 'instance_type' };
+    ok(await runners.setRunnerPausedAction({ runnerId: out.runnerId, paused: true, scope }));
+    expect(fake.runners.get(out.runnerId)!.paused).toBe(true);
+    const del = { runnerId: out.runnerId, reason: why, scope };
+    for (const confirm of ['remover', '', 'REMOVER '])
+      expect(fail(await runners.deleteRunnerAction({ ...del, confirm })).code).toBe('VALIDATION');
+    expect(fake.runners.has(out.runnerId)).toBe(true);
+    ok(await runners.deleteRunnerAction({ ...del, confirm: 'REMOVER' }));
+    expect(fake.runners.size).toBe(0);
+
+    await ageSession(u.id, 20);
+    expect(fail(await runners.createRunnerAction(base)).code).toBe('REAUTH_REQUIRED');
+    asRequest(new Headers());
+    expect(fail(await runners.createRunnerAction(base)).code).toBe('UNAUTHENTICATED');
   });
 });

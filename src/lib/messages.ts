@@ -41,6 +41,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   SCAN_NOT_READY: 'A varredura ainda não terminou ou falhou.',
   SCAN_STALE: 'A varredura é antiga demais. Refaça a varredura antes de executar.',
   ITEMS_NOT_IN_SCAN: 'Há itens que não constam na varredura ou que são protegidos.',
+  RUNNER_INSTANCE_ADMIN_ONLY: 'Runners globais (compartilhados da instância) só podem ser criados por administradores do GitLab.',
+  RUNNER_TAGS_REQUIRED: 'Informe ao menos uma tag ou permita jobs sem tag.',
   VAULT_ROOT_NOT_FOUND: 'Grupo raiz dos cofres não encontrado (ou sem acesso). Confira o caminho nas configurações do cofre.',
   ACTOR_UNAVAILABLE: 'Quem habilitou a rotação automática não está mais disponível (banido ou sem papel de admin). Habilite de novo.',
   TOKEN_UNAVAILABLE: 'O token GitLab usado pela rotação automática não está mais ativo. Habilite de novo com outro token.',

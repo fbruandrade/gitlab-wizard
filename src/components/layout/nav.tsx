@@ -2,6 +2,7 @@
 import {
   ClipboardList,
   Eraser,
+  Server,
   History,
   House,
   KeyRound,
@@ -27,6 +28,7 @@ const ICONS = {
   vault: Vault,
   policies: SlidersHorizontal,
   audit: ClipboardList,
+  runners: Server,
 } satisfies Record<string, LucideIcon>;
 export type NavIcon = keyof typeof ICONS;
 

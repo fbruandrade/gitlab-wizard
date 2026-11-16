@@ -25,6 +25,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const items: NavItem[] = [
     { href: '/', label: 'Início', icon: 'home' },
     ...(token?.capabilities.includes('READ_USERS') ? [{ href: '/gitlab/users', label: 'Usuários GitLab', icon: 'users' as const }] : []),
+    ...(token?.capabilities.some((c) => c === 'RUNNERS_CREATE' || c === 'RUNNERS_MANAGE')
+      ? [{ href: '/runners', label: 'Runners', icon: 'runners' as const }]
+      : []),
     { href: '/token', label: 'Meu token GitLab', icon: 'token' },
     { href: '/history', label: 'Histórico', icon: 'history' },
     { href: '/account/security', label: 'Minha conta', icon: 'account' },

@@ -1,7 +1,7 @@
 import 'server-only';
 import { env } from '@/server/env';
 
-export type Capability = 'READ_USERS' | 'ADMIN_USERS' | 'SELF_ROTATE' | 'VAULT_TOKENS';
+export type Capability = 'READ_USERS' | 'ADMIN_USERS' | 'SELF_ROTATE' | 'VAULT_TOKENS' | 'RUNNERS_CREATE' | 'RUNNERS_MANAGE';
 
 export interface CapabilityInput {
   isAdmin: boolean;
@@ -19,5 +19,8 @@ export function computeCapabilities({ isAdmin, scopes, adminModeEnabled }: Capab
   if (has('api', 'self_rotate')) caps.push('SELF_ROTATE');
   // Cofre de tokens de projeto: não exige admin; o GitLab valida o papel (Maintainer+) em cada chamada.
   if (scopes.includes('api')) caps.push('VAULT_TOKENS');
+  // Runners: criar exige o scope `create_runner` (o `api` NÃO basta, segundo a doc); listar/pausar/remover aceita `manage_runner` ou `api`.
+  if (scopes.includes('create_runner')) caps.push('RUNNERS_CREATE');
+  if (has('api', 'manage_runner')) caps.push('RUNNERS_MANAGE');
   return caps;
 }

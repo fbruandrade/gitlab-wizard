@@ -44,7 +44,12 @@ export function TokenSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="sm" data-testid="token-switcher" aria-label={`Token em uso: ${current.name}. Trocar token`} />
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="token-switcher"
+            aria-label={`@${username}${isAdmin ? ' (admin)' : ''} · ${current.name}. Trocar o token em uso`}
+          />
         }
       >
         <span data-testid="gitlab-badge">

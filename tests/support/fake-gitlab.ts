@@ -63,6 +63,22 @@ export interface FakeVariable {
   hidden: boolean;
   environment_scope: string;
 }
+export interface FakeRunner {
+  id: number;
+  token: string;
+  runner_type: 'instance_type' | 'group_type' | 'project_type';
+  groupId?: number;
+  projectId?: number;
+  description: string;
+  tag_list: string[];
+  paused: boolean;
+  status: string;
+  run_untagged: boolean;
+  locked: boolean;
+  access_level: string;
+  maximum_timeout: number | null;
+  ownerUserId: number;
+}
 export interface FakeOptions {
   tls?: { key: string; cert: string };
   adminMode?: boolean;
@@ -100,6 +116,8 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
   const groups = new Map<number, FakeGroup>();
   const projects = new Map<number, FakeProject>();
   const variables = new Map<string, FakeVariable>();
+  const runners = new Map<number, FakeRunner>();
+  let nextRunnerId = 9500;
   /** Projetos em que o operador não tem papel (403 ao listar/criar tokens). */
   const denyProjects = new Set<number>();
   let nextGroupId = 700;
@@ -128,6 +146,7 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
     groups,
     projects,
     variables,
+    runners,
     denyProjects,
     addGroup(path: string, parentId: number | null = null): FakeGroup {
       const parent = parentId ? groups.get(parentId)! : null;
@@ -352,9 +371,73 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
       if (!fault.applyThenDelay) return;
     }
 
+    // ── runners: criação (POST /user/runners), listas e gestão ───────────────────────────────────────────────
+    if (req.method === 'POST' && path === '/user/runners') {
+      if (!has('create_runner')) return json(res, 403, { message: '403 Forbidden' });
+      const b = JSON.parse((await readBody(req)) || '{}') as Record<string, unknown>;
+      const type = b.runner_type as FakeRunner['runner_type'];
+      if (!['instance_type', 'group_type', 'project_type'].includes(type)) return json(res, 400, { message: 'runner_type is invalid' });
+      if (type === 'instance_type' && !owner.is_admin) return json(res, 403, { message: '403 Forbidden' });
+      if (type === 'group_type' && !groups.has(Number(b.group_id))) return json(res, 404, { message: '404 Group Not Found' });
+      if (type === 'project_type' && !projects.has(Number(b.project_id))) return json(res, 404, { message: '404 Project Not Found' });
+      if (type === 'project_type' && denyProjects.has(Number(b.project_id))) return json(res, 403, { message: '403 Forbidden' });
+      const r: FakeRunner = {
+        id: nextRunnerId++,
+        token: `glrt-${randomBytes(10).toString('hex')}`,
+        runner_type: type,
+        ...(type === 'group_type' && { groupId: Number(b.group_id) }),
+        ...(type === 'project_type' && { projectId: Number(b.project_id) }),
+        description: String(b.description ?? ''),
+        tag_list: String(b.tag_list ?? '')
+          .split(',')
+          .filter(Boolean),
+        paused: Boolean(b.paused),
+        status: 'never_contacted',
+        run_untagged: Boolean(b.run_untagged),
+        locked: Boolean(b.locked),
+        access_level: String(b.access_level ?? 'not_protected'),
+        maximum_timeout: (b.maximum_timeout as number | undefined) ?? null,
+        ownerUserId: owner.id,
+      };
+      runners.set(r.id, r);
+      return json(res, 201, { id: r.id, token: r.token, token_expires_at: null });
+    }
+    const runnerView = (r: FakeRunner) => ({
+      id: r.id,
+      description: r.description,
+      paused: r.paused,
+      status: r.status,
+      online: r.status === 'online',
+      runner_type: r.runner_type,
+      is_shared: r.runner_type === 'instance_type',
+      tag_list: r.tag_list,
+    });
+    if (path === '/runners/all' && req.method === 'GET') {
+      if (!owner.is_admin || !has('api', 'manage_runner')) return json(res, 403, { message: '403 Forbidden' });
+      const t = url.searchParams.get('type');
+      const p = page([...runners.values()].filter((r) => !t || r.runner_type === t).map(runnerView));
+      return json(res, 200, p.slice, p.headers);
+    }
+    {
+      const rm = path.match(/^\/runners\/(\d+)$/);
+      if (rm && (req.method === 'PUT' || req.method === 'DELETE')) {
+        if (!has('api', 'manage_runner')) return json(res, 403, { message: '403 Forbidden' });
+        const r = runners.get(Number(rm[1]));
+        if (!r) return json(res, 404, { message: '404 Runner Not Found' });
+        if (req.method === 'DELETE') {
+          runners.delete(r.id);
+          res.writeHead(204);
+          return void res.end();
+        }
+        const body = JSON.parse((await readBody(req)) || '{}') as { paused?: boolean };
+        if (body.paused !== undefined) r.paused = body.paused;
+        return json(res, 200, runnerView(r));
+      }
+    }
+
     // ── cofre de tokens de projeto: grupos, projetos, tokens de projeto e variáveis de grupo ─────────────────
     if (path.startsWith('/groups') || path.startsWith('/projects')) {
-      if (!has('api', 'read_api')) return json(res, 403, { message: '403 Forbidden' });
+      if (!has('api', 'read_api', 'manage_runner', 'create_runner')) return json(res, 403, { message: '403 Forbidden' });
       const groupView = ({ id, name, path: gp, full_path, parent_id }: FakeGroup) => ({ id, name, path: gp, full_path, parent_id });
       const projView = ({ id, name, path: pp, path_with_namespace }: FakeProject) => ({ id, name, path: pp, path_with_namespace });
       const tokView = (t: FakeToken & { accessLevel?: number }) => ({
@@ -379,6 +462,23 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
       });
       let m: RegExpMatchArray | null;
 
+      if (req.method === 'GET' && (path === '/groups' || path === '/projects')) {
+        const q = (url.searchParams.get('search') ?? '').toLowerCase();
+        const list: object[] =
+          path === '/groups'
+            ? [...groups.values()].filter((g) => !q || g.full_path.toLowerCase().includes(q)).map(groupView)
+            : [...projects.values()].filter((pr) => !q || pr.path_with_namespace.toLowerCase().includes(q)).map(projView);
+        const p = page(list);
+        return json(res, 200, p.slice, p.headers);
+      }
+      if ((m = path.match(/^\/(groups|projects)\/(\d+)\/runners$/)) && req.method === 'GET') {
+        const id = Number(m[2]);
+        if (m[1] === 'groups' ? !groups.has(id) : !projects.has(id)) return json(res, 404, { message: '404 Not Found' });
+        if (m[1] === 'projects' && denyProjects.has(id)) return json(res, 403, { message: '403 Forbidden' });
+        const list = [...runners.values()].filter((r) => (m![1] === 'groups' ? r.groupId === id : r.projectId === id));
+        const p = page(list.map(runnerView));
+        return json(res, 200, p.slice, p.headers);
+      }
       if ((m = path.match(/^\/groups\/([^/]+)\/subgroups$/)) && req.method === 'GET') {
         const p = page([...groups.values()].filter((g) => g.parent_id === Number(m![1])).map(groupView));
         return json(res, 200, p.slice, p.headers);
@@ -583,6 +683,7 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
           const { groupId, key, value, ...rest } = body as { groupId: number; key: string; value: string } & Partial<FakeVariable>;
           return send(200, api.setVariable(Number(groupId), key, value, rest));
         }
+        if (req.method === 'GET' && p === '/runners-list') return send(200, [...runners.values()]);
         if (req.method === 'GET' && p === '/groups-list') return send(200, [...groups.values()]);
         if (req.method === 'GET' && p === '/variables') return send(200, [...variables.values()]);
         if (req.method === 'GET' && p === '/project-tokens')

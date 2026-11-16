@@ -31,6 +31,9 @@ export const ACTION_LABELS: Record<string, string> = {
   GITLAB_CLEANUP_EXECUTED: 'Limpeza de credenciais executada',
   GITLAB_CLEANUP_PAT_REVOKED: 'Token de usuário revogado',
   GITLAB_CLEANUP_SSH_KEY_DELETED: 'Chave SSH de usuário removida',
+  RUNNER_CREATED: 'Runner criado',
+  RUNNER_PAUSED: 'Runner pausado ou retomado',
+  RUNNER_DELETED: 'Runner removido',
   VAULT_AUTO_ENABLED: 'Rotação automática dos cofres habilitada',
   VAULT_AUTO_DISABLED: 'Rotação automática dos cofres desabilitada',
   VAULT_AUTO_RUN: 'Rotação automática dos cofres: execução',
@@ -49,6 +52,7 @@ export const ACTION_GROUPS = [
   { value: 'GITLAB_USER_', label: 'Usuários GitLab' },
   { value: 'GITLAB_CLEANUP_', label: 'Limpeza de credenciais' },
   { value: 'VAULT_', label: 'Cofres de token' },
+  { value: 'RUNNER_', label: 'Runners' },
   { value: 'GITLAB_POLICY_', label: 'Políticas do GitLab' },
   { value: 'SETTINGS_', label: 'Configurações' },
 ] as const;

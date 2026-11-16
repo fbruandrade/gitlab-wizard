@@ -1,6 +1,6 @@
 # 09 — Estratégia de testes
 
-Tudo abaixo **existe e passa**: `npm test` (214), `npm run test:integration` (288), `npm run test:e2e` (62) e `npm run test:coverage` (unit + integração: 502 testes, com limites de cobertura). Total: **564 testes**. Os testes de integração e E2E precisam de Docker (Testcontainers).
+Tudo abaixo **existe e passa**: `npm test` (228), `npm run test:integration` (299), `npm run test:e2e` (63) e `npm run test:coverage` (unit + integração: 526 testes, com limites de cobertura). Total: **590 testes**. Os testes de integração e E2E precisam de Docker (Testcontainers).
 
 ## 1. Pirâmide
 
@@ -64,7 +64,7 @@ npm run test:coverage      # unitários + integração num só processo; falha s
 open coverage/index.html   # relatório navegável (linha a linha); também coverage/lcov.info e cobertura-coverage.xml
 ```
 
-**Resultado atual (502 testes): 96,8% statements · 90,4% branches · 95,0% funções · 98,2% linhas.** Início da medição: 80,9 / 71,9 / 81,1 / 83,3.
+**Resultado atual (526 testes): 96,9% statements · 90,7% branches · 95,2% funções · 98,3% linhas.** Início da medição: 80,9 / 71,9 / 81,1 / 83,3.
 
 **Por que combinado:** cada suíte cobre partes diferentes (os unitários só enxergam ~21% sozinhos; a lógica de servidor é exercida pela integração com Postgres real). Medir separado subestimaria as duas, então o `vitest.coverage.config.mts` usa os dois *projects* do Vitest e **mescla** a cobertura (provider `v8`, sem instrumentação de código).
 
@@ -93,3 +93,5 @@ open coverage/index.html   # relatório navegável (linha a linha); também cove
 
 - **Rotação automática** (`vault-auto.test.ts`, 12 testes): desabilitada não faz nada (nem chamadas ao GitLab); habilitar guarda quem e qual token (nunca o valor) e audita; exige capability; rotaciona **só** vencido/no alerta (OK, sem token, sem variáveis e vários tokens ficam intactos); respeita os dias de alerta; falha parcial → `PARTIAL`; quem habilitou banido ou sem papel de admin → não age e registra; token desvinculado → não cai para outro token da conta; varredura que falha vira problema registrado; duas execuções simultâneas (uma recebe `BUSY`, concessão no banco); agendador interno idempotente; sem vazamento do valor do token. Mais: gatilho HTTP (404/401/200) e um roteiro E2E (habilitar na tela → gatilho externo → última execução na tela).
 - **Limpeza: chaves SSH sem validade** (`cleanup-rules`, `cleanup.test.ts` e E2E): lista todas as chaves sem `expires_at` (inclusive as sem dado de último uso), ignora as com validade, combina com os outros critérios, revoga auditando o motivo `NO_EXPIRY` e ignora a que ganhou validade depois da varredura.
+- **Runners** (`runner.test.ts`, 10 testes + ações + `runner-rules.test.ts` + E2E): global só por admin (recusado antes de chamar o GitLab), de grupo e de projeto por Owner, `api` sem `create_runner` não cria, 403/404/500 do GitLab (escrita sem retry), busca de alvos, listagem por escopo, pausar/retomar, remover só dentro do escopo, auditoria **sem o token**; E2E: criar global e de grupo (comando de registro com o token), listar, pausar e remover, token ausente da tela e da auditoria, axe com a tabela.
+- Correção encontrada pelo E2E: o seletor de token tinha nome acessível diferente do texto visível (axe `label-content-name-mismatch`).

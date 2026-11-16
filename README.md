@@ -7,6 +7,7 @@ Funciona com GitLab **auto-gerenciado**, inclusive com **certificado auto-assina
 - **Bloquear e desbloquear** usuário GitLab e **resetar o MFA** dele (motivo obrigatório, tudo auditado).
 - **Limpar credenciais**: varredura (dry-run) de tokens e chaves SSH de usuários bloqueados, sem uso há N dias (N configurável na tela) e/ou **chaves SSH sem prazo de validade**, revisão e revogação auditada.
 - **Cofres de token** (`/admin/vault`): valida a expiração do token de cada projeto-cofre em `seguranca-corporativa/<ambiente>/<aplicação>`, e cria ou rotaciona o token gravando `PID_<AMB>`/`DEVOPS_<AMB>` no grupo da aplicação (dry-run, validação antes de revogar o antigo, auditoria), com **rotação automática** opcional quando o token vence ou entra no prazo de alerta. Ver [docs/13](docs/13-cofre-de-tokens-de-projeto.md).
+- **Runners** (`/runners`): cria runners **globais**, **de grupo** e **de projeto** (token mostrado uma vez + comando de registro), lista, pausa e remove. Ver [docs/14](docs/14-runners.md).
 - **Políticas**: prazo máximo de validade do PAT na ferramenta e (após simulação) no GitLab.
 - **Vários tokens por conta**: cadastre quantos PATs quiser (do mesmo usuário GitLab), veja os escopos de cada um, defina o **padrão** e escolha qual está **em uso**.
 - **Rotacionar o seu PAT** e salvá-lo cifrado (AES-256-GCM) automaticamente.
@@ -43,10 +44,10 @@ Por padrão o certificado é **verificado**. Se o seu GitLab usa CA interna ou c
 
 ## Testes
 ```bash
-npm run lint && npm run typecheck && npm test   # 214 unitários
-npm run test:integration                        # 288 — Postgres real (Testcontainers) + GitLab falso
+npm run lint && npm run typecheck && npm test   # 228 unitários
+npm run test:integration                        # 299 — Postgres real (Testcontainers) + GitLab falso
 npm run test:coverage                           # unit + integração, cobertura mesclada com limites mínimos (coverage/index.html)
-npm run test:e2e                                # 62 — build + Chromium + axe (WCAG 2.1 AA)
+npm run test:e2e                                # 63 — build + Chromium + axe (WCAG 2.1 AA)
 ```
 
 ## Imagens de produção

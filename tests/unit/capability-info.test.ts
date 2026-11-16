@@ -16,7 +16,18 @@ describe('missingReason (por que falta cada capacidade)', () => {
     expect(missingReason('SELF_ROTATE', admin)).toMatch(/api.*self_rotate/);
     expect(missingReason('QUALQUER', admin)).toMatch(/self_rotate/);
   });
-  it('lista as 4 capacidades', () =>
-    expect(CAPABILITIES.map((c) => c.key)).toEqual(['READ_USERS', 'ADMIN_USERS', 'SELF_ROTATE', 'VAULT_TOKENS']));
+  it('lista as 6 capacidades', () =>
+    expect(CAPABILITIES.map((c) => c.key)).toEqual([
+      'READ_USERS',
+      'ADMIN_USERS',
+      'SELF_ROTATE',
+      'VAULT_TOKENS',
+      'RUNNERS_CREATE',
+      'RUNNERS_MANAGE',
+    ]));
+  it('runners: pedem create_runner / manage_runner', () => {
+    expect(missingReason('RUNNERS_CREATE', admin)).toMatch(/create_runner/);
+    expect(missingReason('RUNNERS_MANAGE', admin)).toMatch(/manage_runner/);
+  });
   it('VAULT_TOKENS: pede api e papel Maintainer', () => expect(missingReason('VAULT_TOKENS', admin)).toMatch(/api.*Maintainer/));
 });

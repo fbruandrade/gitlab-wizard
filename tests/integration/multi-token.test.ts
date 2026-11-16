@@ -69,7 +69,7 @@ describe('adicionar vários tokens', () => {
 
   it('cada token guarda os SEUS escopos e capacidades', async () => {
     const w = await world();
-    expect(w.rows.admin!.capabilities.sort()).toEqual(['ADMIN_USERS', 'READ_USERS', 'SELF_ROTATE', 'VAULT_TOKENS']);
+    expect(w.rows.admin!.capabilities.sort()).toEqual(['ADMIN_USERS', 'READ_USERS', 'RUNNERS_MANAGE', 'SELF_ROTATE', 'VAULT_TOKENS']);
     expect(w.rows.leitura!.scopes).toEqual(['read_api']);
     expect(w.rows.leitura!.capabilities).toEqual(['READ_USERS']);
     expect(w.rows.rotacao!.capabilities).toEqual(['SELF_ROTATE']);

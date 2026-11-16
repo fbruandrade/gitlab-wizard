@@ -6,6 +6,9 @@ import { logger } from '@/server/logger';
 import { GitLabApiError } from './errors';
 import {
   accessTokenSchema,
+  createdRunnerSchema,
+  runnerSchema,
+  targetSchema,
   appSettingsSchema,
   createdAccessTokenSchema,
   groupSchema,
@@ -20,6 +23,9 @@ import {
   tokenInfoSchema,
   versionSchema,
   type GitLabAccessToken,
+  type GitLabCreatedRunner,
+  type GitLabRunner,
+  type GitLabTarget,
   type GitLabCreatedAccessToken,
   type GitLabCurrentUser,
   type GitLabGroup,
@@ -206,6 +212,61 @@ export class GitLabClient {
   }
   async updateGroupVariable(groupId: number, v: VariableWrite): Promise<void> {
     await this.request('PUT', `/groups/${groupId}/variables/${encodeURIComponent(v.key)}`, { body: variableBody(v, false) });
+  }
+
+  // ── runners ──
+  /** Grupos/projetos em que o usuário é Owner (única role que cria runner de grupo/projeto). */
+  async searchRunnerTargets(kind: 'group' | 'project', q: string): Promise<GitLabTarget[]> {
+    const params = new URLSearchParams({ per_page: '20', min_access_level: '50', ...(q && { search: q }) });
+    if (kind === 'project') params.set('membership', 'true');
+    const { json } = await this.request('GET', `/${kind === 'group' ? 'groups' : 'projects'}?${params}`, { retry: true });
+    return this.parse(json, targetSchema.array());
+  }
+  /** Runners de um escopo. Instância exige admin. */
+  listRunners(
+    scope: { type: 'instance_type' } | { type: 'group_type'; id: number } | { type: 'project_type'; id: number },
+  ): Promise<GitLabRunner[]> {
+    const path =
+      scope.type === 'instance_type'
+        ? '/runners/all'
+        : scope.type === 'group_type'
+          ? `/groups/${scope.id}/runners`
+          : `/projects/${scope.id}/runners`;
+    return this.listAll(path, runnerSchema, { type: scope.type });
+  }
+  /** Sem retry: criar é escrita e o token só volta nesta resposta. Timeout = o runner pode ter sido criado (confira a lista). */
+  async createRunner(b: {
+    type: 'instance_type' | 'group_type' | 'project_type';
+    targetId?: number;
+    description?: string;
+    tags: string[];
+    runUntagged: boolean;
+    locked: boolean;
+    protectedRefs: boolean;
+    paused: boolean;
+    maximumTimeout: number | null;
+  }): Promise<GitLabCreatedRunner> {
+    const { json } = await this.request('POST', '/user/runners', {
+      body: {
+        runner_type: b.type,
+        ...(b.type === 'group_type' && { group_id: b.targetId }),
+        ...(b.type === 'project_type' && { project_id: b.targetId }),
+        ...(b.description && { description: b.description }),
+        tag_list: b.tags.join(','),
+        run_untagged: b.runUntagged,
+        locked: b.locked,
+        access_level: b.protectedRefs ? 'ref_protected' : 'not_protected',
+        paused: b.paused,
+        ...(b.maximumTimeout && { maximum_timeout: b.maximumTimeout }),
+      },
+    });
+    return this.parse(json, createdRunnerSchema);
+  }
+  async setRunnerPaused(id: number, paused: boolean): Promise<void> {
+    await this.request('PUT', `/runners/${id}`, { body: { paused } });
+  }
+  async deleteRunner(id: number): Promise<void> {
+    await this.request('DELETE', `/runners/${id}`);
   }
 
   // ── configurações da instância (admin) ──

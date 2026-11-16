@@ -142,3 +142,34 @@ export const variableSchema = z.looseObject({
   variable_type: z.string().optional(),
 });
 export type GitLabVariable = z.infer<typeof variableSchema>;
+
+// ── runners ──
+export const runnerSchema = z.looseObject({
+  id: z.number().int(),
+  description: z.string().nullish(),
+  paused: z.boolean().optional().default(false),
+  online: z.boolean().nullish(),
+  status: z.string().nullish(),
+  runner_type: z.string().nullish(),
+  is_shared: z.boolean().optional(),
+  tag_list: z.array(z.string()).optional(),
+  contacted_at: z.string().nullish(),
+});
+export type GitLabRunner = z.infer<typeof runnerSchema>;
+
+/** POST /user/runners: o `token` (glrt-…) só vem nesta resposta. */
+export const createdRunnerSchema = z.looseObject({
+  id: z.number().int(),
+  token: z.string().min(1),
+  token_expires_at: z.string().nullish(),
+});
+export type GitLabCreatedRunner = z.infer<typeof createdRunnerSchema>;
+
+/** Alvo da busca (grupo ou projeto em que o usuário pode criar runner). */
+export const targetSchema = z.looseObject({
+  id: z.number().int(),
+  name: z.string(),
+  full_path: z.string().optional(),
+  path_with_namespace: z.string().optional(),
+});
+export type GitLabTarget = z.infer<typeof targetSchema>;

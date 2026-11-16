@@ -48,7 +48,7 @@ describe('vincular PAT', () => {
   it('valida no GitLab, calcula capacidades e guarda CIFRADO (sem o token em claro no banco)', async () => {
     const { tok, user } = await linked();
     const row = (await getActiveToken(user.id))!;
-    expect(row.capabilities.sort()).toEqual(['ADMIN_USERS', 'READ_USERS', 'SELF_ROTATE', 'VAULT_TOKENS']);
+    expect(row.capabilities.sort()).toEqual(['ADMIN_USERS', 'READ_USERS', 'RUNNERS_MANAGE', 'SELF_ROTATE', 'VAULT_TOKENS']);
     expect(row.gitlabUsername).toBe('root');
     expect(Buffer.from(row.ciphertext!).toString('utf8')).not.toContain(tok.token);
     expect(JSON.stringify(row)).not.toContain(tok.token);
