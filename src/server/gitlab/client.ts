@@ -269,6 +269,10 @@ export class GitLabClient {
   async setRunnerPaused(id: number, paused: boolean): Promise<void> {
     await this.request('PUT', `/runners/${id}`, { body: { paused } });
   }
+  /** Troca a lista de tags (substitui tudo). O GitLab recusa lista vazia se o runner não aceita jobs sem tag. */
+  async setRunnerTags(id: number, tags: string[]): Promise<void> {
+    await this.request('PUT', `/runners/${id}`, { body: { tag_list: tags } });
+  }
   async deleteRunner(id: number): Promise<void> {
     await this.request('DELETE', `/runners/${id}`);
   }

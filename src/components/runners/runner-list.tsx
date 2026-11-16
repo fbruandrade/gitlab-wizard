@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { deleteRunnerAction, setRunnerPausedAction } from '@/app/(app)/runners/actions';
+import { deleteRunnerAction, setRunnerPausedAction, updateRunnerTagsAction } from '@/app/(app)/runners/actions';
 import { useSensitiveAction } from '@/components/auth/reauth-provider';
 import { Field } from '@/components/common/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DELETE_RUNNER_WORD, type RunnerType } from '@/lib/runner-rules';
+import { DELETE_RUNNER_WORD, diffTags, parseTags, updateRunnerTagsSchema, type RunnerType } from '@/lib/runner-rules';
 
 export interface RunnerRow {
   id: number;
@@ -31,9 +31,34 @@ const STATUS: Record<string, { label: string; variant: 'success' | 'warning' | '
   never_contacted: { label: 'nunca conectou', variant: 'outline' },
 };
 
+/** Resumo do que muda, antes de confirmar. */
+function TagsDiff({ before, after }: { before: string[]; after: string[] }) {
+  const { added, removed } = diffTags(before, after);
+  if (added.length === 0 && removed.length === 0) return <p className="text-xs text-muted-foreground">Nenhuma alteração.</p>;
+  return (
+    <p className="flex flex-wrap items-center gap-1 text-xs" data-testid="runner-tags-diff">
+      {added.map((t) => (
+        <Badge key={`+${t}`} variant="success">
+          + {t}
+        </Badge>
+      ))}
+      {removed.map((t) => (
+        <Badge key={`-${t}`} variant="destructive">
+          − {t}
+        </Badge>
+      ))}
+    </p>
+  );
+}
+
 export function RunnerList({ runners, scope }: { runners: RunnerRow[]; scope: Scope }) {
   const router = useRouter();
   const run = useSensitiveAction();
+  const [editing, setEditing] = useState<RunnerRow | null>(null);
+  const [tagsText, setTagsText] = useState('');
+  const [tagsReason, setTagsReason] = useState('');
+  const [tagsBusy, setTagsBusy] = useState(false);
+  const [tagsError, setTagsError] = useState<string | null>(null);
   const [target, setTarget] = useState<RunnerRow | null>(null);
   const [reason, setReason] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -44,6 +69,27 @@ export function RunnerList({ runners, scope }: { runners: RunnerRow[]; scope: Sc
     const res = await run(() => setRunnerPausedAction({ runnerId: r.id, paused: !r.paused, scope }));
     if (!res.ok) return toast.error(res.message);
     toast.success(r.paused ? 'Runner retomado.' : 'Runner pausado.');
+    router.refresh();
+  }
+
+  function startEdit(r: RunnerRow) {
+    setEditing(r);
+    setTagsText((r.tags ?? []).join(', '));
+    setTagsReason('');
+    setTagsError(null);
+  }
+
+  async function saveTags() {
+    if (!editing) return;
+    const parsed = updateRunnerTagsSchema.safeParse({ runnerId: editing.id, tags: parseTags(tagsText), reason: tagsReason, scope });
+    if (!parsed.success) return setTagsError(parsed.error.issues[0]!.message);
+    setTagsBusy(true);
+    setTagsError(null);
+    const res = await run(() => updateRunnerTagsAction(parsed.data));
+    setTagsBusy(false);
+    if (!res.ok) return setTagsError(res.message);
+    toast.success(`Tags do runner #${editing.id} atualizadas.`);
+    setEditing(null);
     router.refresh();
   }
 
@@ -112,6 +158,16 @@ export function RunnerList({ runners, scope }: { runners: RunnerRow[]; scope: Sc
                   )}
                 </TableCell>
                 <TableCell className="space-x-2 text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={r.tags === undefined}
+                    title={r.tags === undefined ? 'As tags atuais não estão disponíveis.' : undefined}
+                    onClick={() => startEdit(r)}
+                    data-testid={`runner-edit-${r.id}`}
+                  >
+                    Editar tags
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => void toggle(r)} data-testid={`runner-pause-${r.id}`}>
                     {r.paused ? 'Retomar' : 'Pausar'}
                   </Button>
@@ -124,6 +180,52 @@ export function RunnerList({ runners, scope }: { runners: RunnerRow[]; scope: Sc
           })}
         </TableBody>
       </Table>
+
+      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent data-testid="runner-tags-dialog">
+          <DialogHeader>
+            <DialogTitle>Editar tags do runner #{editing?.id}</DialogTitle>
+            <DialogDescription>
+              A lista abaixo <strong>substitui</strong> as tags atuais. Jobs que pedem uma tag que o runner perder deixam de rodar nele.
+            </DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-3">
+              <Field id="rt-tags" label="Tags (separadas por vírgula)">
+                <Input id="rt-tags" value={tagsText} onChange={(e) => setTagsText(e.target.value)} autoComplete="off" />
+              </Field>
+              <TagsDiff before={editing.tags ?? []} after={parseTags(tagsText)} />
+              <Field id="rt-reason" label="Motivo / nº do chamado *" hint="Mínimo de 10 caracteres. Fica na auditoria.">
+                <Input id="rt-reason" value={tagsReason} onChange={(e) => setTagsReason(e.target.value)} autoComplete="off" />
+              </Field>
+              {tagsError && (
+                <Alert variant="destructive" role="alert" data-testid="runner-tags-error">
+                  <AlertDescription>{tagsError}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" autoFocus onClick={() => setEditing(null)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={
+                tagsBusy ||
+                tagsReason.trim().length < 10 ||
+                (editing !== null &&
+                  diffTags(editing.tags ?? [], parseTags(tagsText)).added.length +
+                    diffTags(editing.tags ?? [], parseTags(tagsText)).removed.length ===
+                    0)
+              }
+              onClick={() => void saveTags()}
+              data-testid="runner-tags-save"
+            >
+              {tagsBusy ? 'Salvando…' : 'Salvar tags'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={target !== null} onOpenChange={(o) => !o && setTarget(null)}>
         <DialogContent data-testid="runner-delete-dialog">

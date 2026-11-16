@@ -50,6 +50,15 @@ export const deleteRunnerSchema = runnerIdSchema.extend({
   confirm: z.literal('REMOVER'),
   scope: runnerTargetSchema,
 });
+export const updateRunnerTagsSchema = runnerIdSchema.extend({
+  tags: z.array(z.string().trim().regex(RUNNER_TAG, 'Tag inválida (até 50 caracteres: letras, números e . _ - : / + @).')).max(20),
+  reason: reasonSchema,
+  scope: runnerTargetSchema,
+});
+/** O que muda ao trocar as tags (para o resumo antes de confirmar). */
+export function diffTags(before: readonly string[], after: readonly string[]) {
+  return { added: after.filter((t) => !before.includes(t)), removed: before.filter((t) => !after.includes(t)) };
+}
 export const searchTargetsSchema = z.object({ kind: z.enum(['group', 'project']), q: z.string().trim().max(100) });
 
 /** Comando para registrar o runner na máquina (o token só existe nesta resposta). */

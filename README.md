@@ -44,8 +44,8 @@ Por padrão o certificado é **verificado**. Se o seu GitLab usa CA interna ou c
 
 ## Testes
 ```bash
-npm run lint && npm run typecheck && npm test   # 228 unitários
-npm run test:integration                        # 302 — Postgres real (Testcontainers) + GitLab falso
+npm run lint && npm run typecheck && npm test   # 230 unitários
+npm run test:integration                        # 305 — Postgres real (Testcontainers) + GitLab falso
 npm run test:coverage                           # unit + integração, cobertura mesclada com limites mínimos (coverage/index.html)
 npm run test:e2e                                # 63 — build + Chromium + axe (WCAG 2.1 AA)
 ```

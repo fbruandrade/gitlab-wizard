@@ -440,7 +440,14 @@ export async function startFakeGitLab(opts: FakeOptions = {}) {
           res.writeHead(204);
           return void res.end();
         }
-        const body = JSON.parse((await readBody(req)) || '{}') as { paused?: boolean };
+        const body = JSON.parse((await readBody(req)) || '{}') as { paused?: boolean; tag_list?: string[] | string };
+        if (body.tag_list !== undefined) {
+          const tags = Array.isArray(body.tag_list) ? body.tag_list : String(body.tag_list).split(',').filter(Boolean);
+          // regra real do GitLab: sem tags só se o runner aceita jobs sem tag
+          if (tags.length === 0 && !r.run_untagged)
+            return json(res, 400, { message: { tags_list: ['can not be empty when runner is not allowed to pick untagged jobs'] } });
+          r.tag_list = tags;
+        }
         if (body.paused !== undefined) r.paused = body.paused;
         return json(res, 200, runnerView(r));
       }

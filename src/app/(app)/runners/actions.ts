@@ -1,9 +1,15 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { createRunnerSchema, deleteRunnerSchema, searchTargetsSchema, setRunnerPausedSchema } from '@/lib/runner-rules';
+import {
+  createRunnerSchema,
+  deleteRunnerSchema,
+  searchTargetsSchema,
+  setRunnerPausedSchema,
+  updateRunnerTagsSchema,
+} from '@/lib/runner-rules';
 import { runAction } from '@/server/action-result';
 import { gitlabCtx } from '@/server/action-context';
-import { createRunner, deleteRunner, searchRunnerTargets, setRunnerPaused } from '@/server/services/runner.service';
+import { createRunner, deleteRunner, searchRunnerTargets, setRunnerPaused, updateRunnerTags } from '@/server/services/runner.service';
 
 export async function searchRunnerTargetsAction(input: unknown) {
   return runAction(async () => {
@@ -36,5 +42,14 @@ export async function deleteRunnerAction(input: unknown) {
     const ctx = await gitlabCtx();
     await deleteRunner(ctx, deleteRunnerSchema.parse(input));
     revalidatePath('/runners');
+  });
+}
+
+export async function updateRunnerTagsAction(input: unknown) {
+  return runAction(async () => {
+    const ctx = await gitlabCtx();
+    const out = await updateRunnerTags(ctx, updateRunnerTagsSchema.parse(input));
+    revalidatePath('/runners');
+    return out;
   });
 }

@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreateRunnerInput } from '@/lib/runner-rules';
 import { prisma } from '@/server/db';
 import { addToken } from '@/server/services/gitlab-token.service';
-import { createRunner, deleteRunner, listRunners, searchRunnerTargets, setRunnerPaused } from '@/server/services/runner.service';
+import {
+  createRunner,
+  deleteRunner,
+  listRunners,
+  searchRunnerTargets,
+  setRunnerPaused,
+  updateRunnerTags,
+} from '@/server/services/runner.service';
 import { ctxFor, resetDb, seedUser, startGitLab } from '../support/app';
 import type { FakeGitLab } from '../support/fake-gitlab';
 
@@ -150,6 +157,55 @@ describe('tags na listagem (o GitLab não as devolve nas listas, só no detalhe)
     const a = await createRunner(w.ownerCtx, input({ target: scope }));
     fake.fault({ match: new RegExp(`^GET /runners/${a.runnerId}$`), status: 401 });
     expect(await code(listRunners(w.ownerCtx, scope))).toBe('GITLAB_TOKEN_INVALID');
+  });
+});
+
+describe('editar tags', () => {
+  it('substitui as tags, devolve o que mudou e audita antes/depois com o motivo', async () => {
+    const w = await world();
+    const scope = { type: 'group_type' as const, id: w.grupo.id };
+    const r = await createRunner(w.ownerCtx, input({ target: scope, tags: ['linux', 'docker'] }));
+    const out = await updateRunnerTags(w.ownerCtx, { runnerId: r.runnerId, tags: ['docker', 'gpu', 'gpu'], reason: why, scope });
+    expect(out).toEqual({ before: ['linux', 'docker'], after: ['docker', 'gpu'], added: ['gpu'], removed: ['linux'] });
+    expect(fake.runners.get(r.runnerId)!.tag_list).toEqual(['docker', 'gpu']);
+    const a = await prisma.auditLog.findFirstOrThrow({ where: { action: 'RUNNER_TAGS_UPDATED' } });
+    expect(a).toMatchObject({ result: 'SUCCESS', reason: why });
+    expect(a.metadata).toMatchObject({
+      runnerId: r.runnerId,
+      before: ['linux', 'docker'],
+      after: ['docker', 'gpu'],
+      added: ['gpu'],
+      removed: ['linux'],
+    });
+    // a listagem já mostra as novas tags
+    expect((await listRunners(w.ownerCtx, scope))[0]!.tag_list).toEqual(['docker', 'gpu']);
+  });
+
+  it('esvaziar as tags de um runner que não aceita jobs sem tag é recusado pelo GitLab, nada muda', async () => {
+    const w = await world();
+    const scope = { type: 'group_type' as const, id: w.grupo.id };
+    const r = await createRunner(w.ownerCtx, input({ target: scope, tags: ['a'] }));
+    expect(await code(updateRunnerTags(w.ownerCtx, { runnerId: r.runnerId, tags: [], reason: why, scope }))).toBe('GITLAB_BAD_REQUEST');
+    expect(fake.runners.get(r.runnerId)!.tag_list).toEqual(['a']);
+    expect(
+      await prisma.auditLog.count({ where: { action: 'RUNNER_TAGS_UPDATED', result: 'FAILURE', errorCode: 'GITLAB_BAD_REQUEST' } }),
+    ).toBe(1);
+    // com "jobs sem tag" permitido, pode esvaziar
+    const u = await createRunner(w.ownerCtx, input({ target: scope, tags: ['b'], runUntagged: true }));
+    await updateRunnerTags(w.ownerCtx, { runnerId: u.runnerId, tags: [], reason: why, scope });
+    expect(fake.runners.get(u.runnerId)!.tag_list).toEqual([]);
+  });
+
+  it('só edita runner do escopo informado e exige a capability', async () => {
+    const w = await world();
+    const scope = { type: 'group_type' as const, id: w.grupo.id };
+    const global = await createRunner(w.adminCtx, input({ tags: ['g'] }));
+    expect(await code(updateRunnerTags(w.ownerCtx, { runnerId: global.runnerId, tags: ['x'], reason: why, scope }))).toBe('NOT_FOUND');
+    expect(fake.runners.get(global.runnerId)!.tag_list).toEqual(['g']);
+    // `api` (sem create_runner) basta para GERIR runners já existentes (RUNNERS_MANAGE)
+    const mine = await createRunner(w.ownerCtx, input({ target: scope, tags: ['m'] }));
+    expect(await code(updateRunnerTags(w.semCtx, { runnerId: mine.runnerId, tags: ['n'], reason: why, scope }))).toBe('OK');
+    expect(fake.runners.get(mine.runnerId)!.tag_list).toEqual(['n']);
   });
 });
 

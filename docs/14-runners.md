@@ -5,7 +5,8 @@
 ## O que a ferramenta faz
 1. **Cria** o runner no GitLab (`POST /user/runners`, o fluxo atual com token de autenticação `glrt-…`) e mostra **uma única vez**, nesta ordem: (1) o **token** do runner; (2) o comando de registro para uma **máquina com gitlab-runner** (`gitlab-runner register --non-interactive --url <GitLab> --token glrt-… --executor docker --docker-image alpine:latest`, ou `shell`); (3) os comandos para **Kubernetes com Helm**: `helm repo add gitlab https://charts.gitlab.io && helm repo update` e `helm upgrade --install gitlab-runner gitlab/gitlab-runner --namespace gitlab-runner --create-namespace --set gitlabUrl=<GitLab> --set runnerToken=glrt-… --set rbac.create=true` (idempotente; ajuste namespace/release; para GitLab com certificado interno, use `certsSecretName` do chart). Cada bloco tem botão Copiar.
 2. **Lista** os runners de um escopo (as listas do GitLab **não trazem as tags**: a ferramenta busca o detalhe de cada runner, 4 em paralelo; se o detalhe de algum falhar, ele aparece com "indisponível" nas tags em vez de derrubar a lista) (global, grupo ou projeto), com estado (online, offline, sem contato, nunca conectou), pausa e tags.
-3. **Pausa/retoma** e **remove** (motivo + digitar `REMOVER`).
+3. **Edita as tags** de um runner existente: a lista nova **substitui** a atual, com resumo do que entra e do que sai antes de confirmar, motivo obrigatório e auditoria `RUNNER_TAGS_UPDATED` (antes/depois). O GitLab recusa lista vazia se o runner não aceita jobs sem tag (a mensagem dele aparece na tela). Só age em runner do escopo listado.
+4. **Pausa/retoma** e **remove** (motivo + digitar `REMOVER`).
 
 A ferramenta **não instala** o `gitlab-runner` nem sobe a máquina/contêiner: ela cria a entidade no GitLab e entrega o token. O registro é feito por quem opera o host.
 
@@ -37,4 +38,4 @@ Descrição, **tags** (até 20; ao menos uma, ou marcar "jobs sem tag"), jobs se
 1. Versão do GitLab (≥ 16.0 para o fluxo `glrt-`). 2. Token com `create_runner` e papel Owner (ou admin). 3. Criar um runner global de teste, rodar o comando de registro num host de homologação e ver o runner **online**. 4. Confirmar o 403 quando o registro está desabilitado. 5. Confirmar se `api` basta para listar na sua versão (`manage_runner` é o scope documentado).
 
 ## Fora do escopo (próximos passos possíveis)
-Provisionar o host/contêiner do runner (docker compose, Kubernetes), editar tags de um runner existente, redefinir o token de um runner, expiração do token do runner e métricas de fila/uso.
+Provisionar o host/contêiner do runner (docker compose, Kubernetes), redefinir o token de um runner, expiração do token do runner e métricas de fila/uso.

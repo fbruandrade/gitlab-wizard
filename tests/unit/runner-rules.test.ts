@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createRunnerSchema,
   deleteRunnerSchema,
+  diffTags,
+  updateRunnerTagsSchema,
   helmCommands,
   parseTags,
   registrationCommand,
@@ -87,6 +89,20 @@ describe('demais esquemas e utilitários', () => {
     expect(helmCommands({ url: 'u', token: 't', namespace: 'ci', release: 'r1' }).install).toContain(
       'upgrade --install r1 gitlab/gitlab-runner \\\n  --namespace ci',
     );
+  });
+  it('updateRunnerTagsSchema: tags válidas, ≤ 20, motivo e escopo obrigatórios', () => {
+    const v = { runnerId: 1, tags: ['a', 'b'], reason: 'CHG0300 - ajuste de tags', scope: { type: 'group_type', id: 3 } };
+    expect(updateRunnerTagsSchema.safeParse(v).success).toBe(true);
+    expect(updateRunnerTagsSchema.safeParse({ ...v, tags: [] }).success).toBe(true); // o GitLab decide se aceita lista vazia
+    expect(updateRunnerTagsSchema.safeParse({ ...v, tags: ['a,b'] }).success).toBe(false);
+    expect(updateRunnerTagsSchema.safeParse({ ...v, tags: Array.from({ length: 21 }, (_, i) => `t${i}`) }).success).toBe(false);
+    expect(updateRunnerTagsSchema.safeParse({ ...v, reason: 'x' }).success).toBe(false);
+    expect(updateRunnerTagsSchema.safeParse({ ...v, scope: undefined }).success).toBe(false);
+  });
+  it('diffTags: o que entra e o que sai', () => {
+    expect(diffTags(['a', 'b'], ['b', 'c'])).toEqual({ added: ['c'], removed: ['a'] });
+    expect(diffTags(['a'], ['a'])).toEqual({ added: [], removed: [] });
+    expect(diffTags([], ['x'])).toEqual({ added: ['x'], removed: [] });
   });
   it('remover exige a palavra REMOVER e motivo; pausar exige escopo', () => {
     const scope = { type: 'group_type', id: 3 };

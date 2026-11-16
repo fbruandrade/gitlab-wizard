@@ -352,6 +352,12 @@ describe('ações de RUNNERS', () => {
     expect(fail(await runners.searchRunnerTargetsAction({ kind: 'x', q: '' })).code).toBe('VALIDATION');
 
     const scope = { type: 'instance_type' };
+    const tagsIn = { runnerId: out.runnerId, tags: ['novo', 'docker'], reason: why, scope };
+    expect(fail(await runners.updateRunnerTagsAction({ ...tagsIn, reason: 'curto' })).code).toBe('VALIDATION');
+    expect(fail(await runners.updateRunnerTagsAction({ ...tagsIn, tags: ['a,b'] })).code).toBe('VALIDATION');
+    expect(fake.runners.get(out.runnerId)!.tag_list).toEqual(['docker']);
+    expect(ok<{ added: string[] }>(await runners.updateRunnerTagsAction(tagsIn)).added).toEqual(['novo']);
+    expect(fake.runners.get(out.runnerId)!.tag_list).toEqual(['novo', 'docker']);
     ok(await runners.setRunnerPausedAction({ runnerId: out.runnerId, paused: true, scope }));
     expect(fake.runners.get(out.runnerId)!.paused).toBe(true);
     const del = { runnerId: out.runnerId, reason: why, scope };

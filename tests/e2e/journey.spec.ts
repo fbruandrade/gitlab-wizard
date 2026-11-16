@@ -1181,6 +1181,24 @@ test.describe('runners', () => {
     const axe = await new AxeBuilder({ page: admin.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
 
+    // editar tags: resumo do que muda, motivo obrigatório, e a lista passa a mostrar as novas tags
+    await admin.page.getByTestId(`runner-edit-${runners[0]!.id}`).click();
+    const tagsDialog = admin.page.getByTestId('runner-tags-dialog');
+    await expect(tagsDialog.getByLabel('Tags (separadas por vírgula)')).toHaveValue('e2e, docker');
+    await expect(tagsDialog.getByTestId('runner-tags-save')).toBeDisabled(); // nada mudou
+    await tagsDialog.getByLabel('Tags (separadas por vírgula)').fill('docker, gpu');
+    await expect(tagsDialog.getByTestId('runner-tags-diff')).toContainText('+ gpu');
+    await expect(tagsDialog.getByTestId('runner-tags-diff')).toContainText('− e2e');
+    await expect(tagsDialog.getByTestId('runner-tags-save')).toBeDisabled(); // falta o motivo
+    await tagsDialog.getByLabel('Motivo / nº do chamado *').fill('CHG0903 - trocar e2e por gpu');
+    await tagsDialog.getByTestId('runner-tags-save').click();
+    await expect(admin.page.getByTestId(`runner-tags-${runners[0]!.id}`)).toContainText('gpu', { timeout: 15_000 });
+    await expect(admin.page.getByTestId(`runner-tags-${runners[0]!.id}`)).not.toContainText('e2e');
+    expect(
+      (await control.get<{ id: number; tag_list: string[] }[]>('/runners-list')).find((r) => r.id === runners[0]!.id)!.tag_list,
+    ).toEqual(['docker', 'gpu']);
+    expect(await sql("SELECT 1 FROM audit_log WHERE action='RUNNER_TAGS_UPDATED' AND result='SUCCESS'")).toHaveLength(1);
+
     await admin.page.getByTestId(`runner-pause-${runners[0]!.id}`).click();
     await expect(table.getByText('pausado')).toBeVisible();
     expect((await control.get<{ id: number; paused: boolean }[]>('/runners-list')).find((r) => r.id === runners[0]!.id)!.paused).toBe(true);

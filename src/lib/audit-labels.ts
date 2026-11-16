@@ -33,6 +33,7 @@ export const ACTION_LABELS: Record<string, string> = {
   GITLAB_CLEANUP_SSH_KEY_DELETED: 'Chave SSH de usuário removida',
   RUNNER_CREATED: 'Runner criado',
   RUNNER_PAUSED: 'Runner pausado ou retomado',
+  RUNNER_TAGS_UPDATED: 'Tags do runner alteradas',
   RUNNER_DELETED: 'Runner removido',
   VAULT_AUTO_ENABLED: 'Rotação automática dos cofres habilitada',
   VAULT_AUTO_DISABLED: 'Rotação automática dos cofres desabilitada',

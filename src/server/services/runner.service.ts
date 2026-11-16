@@ -1,6 +1,6 @@
 import 'server-only';
 import type { Prisma } from '@/generated/prisma/client';
-import type { CreateRunnerInput } from '@/lib/runner-rules';
+import { diffTags, type CreateRunnerInput } from '@/lib/runner-rules';
 import { ActionError } from '@/server/action-result';
 import { env } from '@/server/env';
 import { GitLabApiError } from '@/server/gitlab/errors';
@@ -87,6 +87,18 @@ export const setRunnerPaused = (ctx: Ctx, i: { runnerId: number; paused: boolean
       await assertInScope(c, i.runnerId, i.scope);
       await c.setRunnerPaused(i.runnerId, i.paused);
       return { value: undefined, metadata: { runnerId: i.runnerId, paused: i.paused } };
+    }),
+  );
+
+export const updateRunnerTags = (ctx: Ctx, i: { runnerId: number; tags: string[]; reason: string; scope: RunnerScope }) =>
+  withAudit({ action: 'RUNNER_TAGS_UPDATED', actor: ctx.actor, meta: ctx.meta, reason: i.reason, target: targetOf(i.scope) }, () =>
+    withGitLab(ctx, 'RUNNERS_MANAGE', async (c) => {
+      await assertInScope(c, i.runnerId, i.scope);
+      const before = (await c.getRunner(i.runnerId)).tag_list ?? [];
+      const tags = [...new Set(i.tags)];
+      await c.setRunnerTags(i.runnerId, tags);
+      const diff = diffTags(before, tags);
+      return { value: { before, after: tags, ...diff }, metadata: { runnerId: i.runnerId, before, after: tags, ...diff } };
     }),
   );
 
